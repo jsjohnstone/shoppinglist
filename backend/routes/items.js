@@ -4,6 +4,7 @@ import { items, categories } from '../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
 import { authenticateApiKey } from '../middleware/apiKey.js';
+import { authenticateDevice } from '../middleware/deviceAuth.js';
 import { processItem } from '../services/llm.js';
 import { processBarcode, isBarcode } from '../services/barcode.js';
 
@@ -295,8 +296,8 @@ async function processItemAsync(itemId, originalName, existingQuantity, existing
   }
 }
 
-// Add item via barcode (for external scanner apps)
-router.post('/barcode', authenticateApiKey, async (req, res) => {
+// Add item via barcode (for barcode scanner devices)
+router.post('/barcode', authenticateDevice, async (req, res) => {
   try {
     const { barcode, quantity, notes, relatedTo, device_id } = req.body;
 

@@ -17,6 +17,16 @@ export async function fetchProduct(barcode) {
 
     if (!response.ok) {
       console.error(`OpenFoodFacts API error: ${response.status}`);
+      
+      // 404 means product not found in database
+      if (response.status === 404) {
+        return {
+          found: false,
+          error: 'Product not found in OpenFoodFacts database',
+        };
+      }
+      
+      // Other errors are actual API failures
       return {
         found: false,
         error: `API request failed with status ${response.status}`,

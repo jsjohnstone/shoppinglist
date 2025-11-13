@@ -3,7 +3,16 @@ import { apiKeys } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
 export async function authenticateApiKey(req, res, next) {
-  const apiKey = req.headers['x-api-key'];
+  // Support both X-API-Key header and Authorization Bearer header
+  let apiKey = req.headers['x-api-key'];
+  
+  // If X-API-Key not present, check for Authorization Bearer
+  if (!apiKey) {
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+    }
+  }
 
   if (!apiKey) {
     return res.status(401).json({ error: 'API key required' });

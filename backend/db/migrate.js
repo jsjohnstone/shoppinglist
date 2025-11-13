@@ -78,7 +78,7 @@ async function runMigration() {
         
         for (const table of tablesToCheck) {
           try {
-            await db.execute(`SELECT 1 FROM ${table} LIMIT 1`);
+            await dbSql`SELECT 1 FROM ${dbSql(table)} LIMIT 1`;
             console.log(`   ✓ Table '${table}' exists`);
           } catch (error) {
             missingTables.push(table);
@@ -177,7 +177,7 @@ async function runMigration() {
 // Check if migrations table exists
 async function checkMigrationsTable() {
   try {
-    await db.execute(`SELECT 1 FROM __drizzle_migrations LIMIT 1`);
+    await dbSql`SELECT 1 FROM __drizzle_migrations LIMIT 1`;
     return true;
   } catch (error) {
     return false;
@@ -202,10 +202,10 @@ function listAvailableMigrations() {
 // Get list of applied migrations
 async function getAppliedMigrations() {
   try {
-    const result = await db.execute(`
+    const result = await dbSql`
       SELECT hash FROM __drizzle_migrations ORDER BY created_at
-    `);
-    return result.rows.map(row => row.hash);
+    `;
+    return result.map(row => row.hash);
   } catch (error) {
     // Migrations table doesn't exist yet
     return [];
@@ -219,30 +219,24 @@ async function applyMissingMigrations(migrationNames) {
   for (const migrationName of migrationNames) {
     try {
       const migrationPath = `./drizzle/${migrationName}.sql`;
-      const sql = fs.readFileSync(migrationPath, 'utf8');
+      const sqlContent = fs.readFileSync(migrationPath, 'utf8');
       
       console.log(`   📝 Applying ${migrationName} directly...`);
       
-      // Split by statement and execute
-      const statements = sql
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
-      
-      for (const statement of statements) {
-        try {
-          await db.execute(statement);
-        } catch (err) {
-          // Log but continue - some statements might be idempotent
-          if (!err.message.includes('already exists')) {
-            console.log(`      ⚠️  Statement warning: ${err.message}`);
-          }
+      // Use the raw postgres connection to execute the entire SQL file
+      try {
+        await dbSql.unsafe(sqlContent);
+        console.log(`   ✓ ${migrationName} applied successfully`);
+      } catch (err) {
+        // Log the error but don't fail completely
+        if (err.message.includes('already exists')) {
+          console.log(`   ℹ️  ${migrationName} - some objects already exist (skipped)`);
+        } else {
+          console.log(`   ⚠️  ${migrationName} - warning: ${err.message}`);
         }
       }
-      
-      console.log(`   ✓ ${migrationName} applied`);
     } catch (error) {
-      console.error(`   ✗ Failed to apply ${migrationName}:`, error.message);
+      console.error(`   ✗ Failed to read ${migrationName}:`, error.message);
     }
   }
   
@@ -254,7 +248,7 @@ async function applyMissingMigrations(migrationNames) {
   
   for (const table of tablesToCheck) {
     try {
-      await db.execute(`SELECT 1 FROM ${table} LIMIT 1`);
+      await dbSql`SELECT 1 FROM ${dbSql(table)} LIMIT 1`;
       console.log(`   ✓ Table '${table}' now exists`);
     } catch (error) {
       console.log(`   ✗ Table '${table}' still missing`);
@@ -266,6 +260,9 @@ async function applyMissingMigrations(migrationNames) {
     console.log('');
     console.log('❌ CRITICAL: Unable to create all required tables');
     console.log('   Please check database permissions and migration files');
+    console.log('');
+    console.log('💡 Manual fix: Connect to your database and run the migration files');
+    console.log('   in the ./drizzle folder in order (0000, 0001, etc.)');
     throw new Error('Migration recovery failed');
   }
 }

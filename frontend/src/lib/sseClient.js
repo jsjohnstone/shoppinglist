@@ -16,16 +16,11 @@ export class SSEClient {
     
     this.token = token;
     const baseUrl = import.meta.env.VITE_API_URL || '';
-    const url = `${baseUrl}/api/items/events`;
+    // Append token as query parameter since EventSource doesn't support custom headers
+    const url = `${baseUrl}/api/items/events?token=${encodeURIComponent(token)}`;
     
     try {
-      // Note: EventSource doesn't support custom headers in standard API
-      // We'll need to modify the backend to accept token via query or cookie
-      // For now, relying on cookie-based auth or we need to use fetch with ReadableStream
-      
-      this.eventSource = new EventSource(url, {
-        withCredentials: true // Include cookies
-      });
+      this.eventSource = new EventSource(url);
       
       this.eventSource.onmessage = (event) => {
         try {

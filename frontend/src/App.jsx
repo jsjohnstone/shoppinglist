@@ -69,34 +69,33 @@ function ShoppingListApp() {
     return () => clearInterval(interval);
   }, []);
 
-  // SSE connection for real-time updates (DISABLED - EventSource doesn't support auth headers)
-  // TODO: Re-enable once we implement cookie-based auth or query param token
-  // useEffect(() => {
-  //   if (!user) return;
-  //   
-  //   sseClient.current = new SSEClient(
-  //     // onMessage
-  //     (event) => {
-  //       // Invalidate queries to refetch data
-  //       if (event.type === 'item_added' || 
-  //           event.type === 'item_updated' || 
-  //           event.type === 'item_deleted' ||
-  //           event.type === 'item_toggled') {
-  //         queryClient.invalidateQueries(['items']);
-  //       }
-  //     },
-  //     // onError
-  //     (error) => {
-  //       console.error('SSE error:', error);
-  //     }
-  //   );
-  //   
-  //   sseClient.current.connect(api.token);
-  //   
-  //   return () => {
-  //     sseClient.current?.disconnect();
-  //   };
-  // }, [user, queryClient]);
+  // SSE connection for real-time updates
+  useEffect(() => {
+    if (!user) return;
+    
+    sseClient.current = new SSEClient(
+      // onMessage
+      (event) => {
+        // Invalidate queries to refetch data
+        if (event.type === 'item_added' || 
+            event.type === 'item_updated' || 
+            event.type === 'item_deleted' ||
+            event.type === 'item_toggled') {
+          queryClient.invalidateQueries(['items']);
+        }
+      },
+      // onError
+      (error) => {
+        console.error('SSE error:', error);
+      }
+    );
+    
+    sseClient.current.connect(api.token);
+    
+    return () => {
+      sseClient.current?.disconnect();
+    };
+  }, [user, queryClient]);
 
   // Check if user is already logged in
   useEffect(() => {

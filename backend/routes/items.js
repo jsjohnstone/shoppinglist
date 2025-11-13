@@ -29,7 +29,25 @@ function broadcastToUser(userId, event) {
 }
 
 // SSE endpoint for real-time updates
-router.get('/events', authenticateToken, (req, res) => {
+// Supports both header auth (JWT in Authorization header) and query param auth (for EventSource)
+router.get('/events', async (req, res) => {
+  // EventSource doesn't support custom headers, so we accept token via query param
+  const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ error: 'No authentication token provided' });
+  }
+
+  // Verify token
+  let user;
+  try {
+    const jwt = await import('jsonwebtoken');
+    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    user = decoded;
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid authentication token' });
+  }
+
   // Set SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -40,10 +58,10 @@ router.get('/events', authenticateToken, (req, res) => {
 
   // Add client to set
   const clientId = Date.now();
-  const client = { id: clientId, userId: req.user.userId, res };
+  const client = { id: clientId, userId: user.userId, res };
   sseClients.add(client);
 
-  console.log(`SSE client connected: ${clientId} for user ${req.user.userId}`);
+  console.log(`SSE client connected: ${clientId} for user ${user.userId}`);
 
   // Send initial connection message
   res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);

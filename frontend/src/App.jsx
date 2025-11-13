@@ -119,20 +119,33 @@ function ShoppingListApp() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShoppingCart className="h-6 w-6" />
-            Shopping List
-          </h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Hello, {user.username}!</span>
+        <div className="max-w-4xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
+          {/* Left side */}
+          <div className="flex items-center gap-2">
+            {/* Logo icon - always visible */}
+            <ShoppingCart className="h-6 w-6 text-blue-600" />
+            
+            {/* Title - hidden on mobile */}
+            <h1 className="hidden md:block text-2xl font-bold">Shopping List</h1>
+          </div>
+          
+          {/* Right side */}
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Welcome message - hidden on mobile */}
+            <span className="hidden md:inline text-sm text-gray-600">
+              Hello, {user.username}!
+            </span>
+            
+            {/* Settings button */}
             <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
-              <SettingsIcon className="h-4 w-4 mr-2" />
-              Settings
+              <SettingsIcon className="h-4 w-4" />
+              <span className="hidden md:inline ml-2">Settings</span>
             </Button>
+            
+            {/* Logout button */}
             <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              <LogOut className="h-4 w-4" />
+              <span className="hidden md:inline ml-2">Logout</span>
             </Button>
           </div>
         </div>

@@ -18,6 +18,8 @@ export const categories = pgTable('categories', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
   sortOrder: integer('sort_order').default(0),
+  icon: varchar('icon', { length: 50 }),
+  color: varchar('color', { length: 7 }),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

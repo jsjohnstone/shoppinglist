@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../db/index.js';
-import { categories } from '../db/schema.js';
+import { categories, items } from '../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -23,7 +23,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // Create category
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name, sortOrder } = req.body;
+    const { name, sortOrder, icon, color } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Category name is required' });
@@ -33,6 +33,8 @@ router.post('/', authenticateToken, async (req, res) => {
       .values({
         name,
         sortOrder: sortOrder || 0,
+        icon: icon || null,
+        color: color || null,
       })
       .returning();
 
@@ -51,11 +53,13 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, sortOrder } = req.body;
+    const { name, sortOrder, icon, color } = req.body;
 
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+    if (icon !== undefined) updateData.icon = icon;
+    if (color !== undefined) updateData.color = color;
 
     const [updatedCategory] = await db.update(categories)
       .set(updateData)
@@ -77,6 +81,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Check if category is used by any items
+    const itemsWithCategory = await db.select()
+      .from(items)
+      .where(eq(items.categoryId, parseInt(id)))
+      .limit(1);
+
+    if (itemsWithCategory.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete category that is in use by items' 
+      });
+    }
 
     const [deletedCategory] = await db.delete(categories)
       .where(eq(categories.id, parseInt(id)))

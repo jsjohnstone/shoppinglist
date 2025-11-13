@@ -10,6 +10,8 @@ import { Trash2, Plus, Copy, Check, CheckCircle2, XCircle, Clock, Wifi, Volume2,
 import { api } from '@/lib/api';
 import { DeviceEditDialog } from './DeviceEditDialog';
 import { DeviceEvents } from './DeviceEvents';
+import { CategoryDialog } from './CategoryDialog';
+import { CategoryBadge } from './CategoryBadge';
 
 export function Settings({ onClose }) {
   const [activeTab, setActiveTab] = useState('api-keys');
@@ -19,6 +21,8 @@ export function Settings({ onClose }) {
   const [ollamaConfig, setOllamaConfig] = useState({ enabled: false, url: '', model: '' });
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [editingDevice, setEditingDevice] = useState(null);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
   const queryClient = useQueryClient();
 
   // API Keys queries
@@ -55,6 +59,12 @@ export function Settings({ onClose }) {
   const { data: ollamaConfigData, isLoading: isLoadingOllama } = useQuery({
     queryKey: ['ollama-config'],
     queryFn: () => api.getOllamaConfig(),
+  });
+
+  // Categories queries
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => api.getCategories(),
   });
 
   // Mutations
@@ -132,6 +142,31 @@ export function Settings({ onClose }) {
 
   const testOllamaMutation = useMutation({
     mutationFn: () => api.testOllama(),
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: (categoryData) => api.createCategory(categoryData),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['categories']);
+      setCategoryDialogOpen(false);
+      setEditingCategory(null);
+    },
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: ({ id, data }) => api.updateCategory(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['categories']);
+      setCategoryDialogOpen(false);
+      setEditingCategory(null);
+    },
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id) => api.deleteCategory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['categories']);
+    },
   });
 
   const playTTSPreview = (template) => {
@@ -250,6 +285,14 @@ export function Settings({ onClose }) {
               onClick={() => setActiveTab('tts')}
             >
               TTS Phrases
+            </button>
+            <button
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                activeTab === 'categories' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+              onClick={() => setActiveTab('categories')}
+            >
+              Categories
             </button>
           </div>
         </div>
@@ -633,6 +676,102 @@ export function Settings({ onClose }) {
                   </div>
                 </Card>
               )}
+            </div>
+          )}
+
+          {/* Categories Tab */}
+          {activeTab === 'categories' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Manage shopping list categories with custom icons and colors.
+                </p>
+                <Button 
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setCategoryDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Category
+                </Button>
+              </div>
+
+              {isLoadingCategories ? (
+                <div className="text-center py-8 text-gray-500">Loading categories...</div>
+              ) : categories.length === 0 ? (
+                <Card className="p-8 text-center text-gray-500">
+                  No categories yet. Add one to get started.
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {categories.map((category) => (
+                    <Card key={category.id} className="p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1">
+                          <CategoryBadge 
+                            name={category.name}
+                            icon={category.icon}
+                            color={category.color}
+                          />
+                          <span className="text-sm text-gray-500">
+                            Sort Order: {category.sortOrder}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => {
+                              setEditingCategory(category);
+                              setCategoryDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={async () => {
+                              if (confirm(`Delete category "${category.name}"? This will fail if items are using this category.`)) {
+                                try {
+                                  await deleteCategoryMutation.mutateAsync(category.id);
+                                } catch (error) {
+                                  alert(error.response?.data?.error || 'Failed to delete category');
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              <CategoryDialog
+                category={editingCategory}
+                open={categoryDialogOpen}
+                onClose={() => {
+                  setCategoryDialogOpen(false);
+                  setEditingCategory(null);
+                }}
+                onSave={(data) => {
+                  if (editingCategory) {
+                    updateCategoryMutation.mutate({
+                      id: editingCategory.id,
+                      data: { ...data, sortOrder: editingCategory.sortOrder }
+                    });
+                  } else {
+                    createCategoryMutation.mutate({
+                      ...data,
+                      sortOrder: categories.length
+                    });
+                  }
+                }}
+              />
             </div>
           )}
 

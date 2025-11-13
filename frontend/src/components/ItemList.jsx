@@ -25,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyNote, Tag, ChevronRight, ChevronDown, Barcode, Edit2, Save, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { CategoryBadge } from './CategoryBadge';
 
 // Simple autocomplete for edit mode
 function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, placeholder, icon: Icon }) {
@@ -318,13 +319,14 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
             </span>
           )}
           {item.categoryName && (
-            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded flex items-center gap-1">
-              <FolderOpen className="h-3 w-3" />
-              {item.categoryName}
-            </span>
+            <CategoryBadge 
+              name={item.categoryName}
+              icon={item.categoryIcon}
+              color={item.categoryColor}
+            />
           )}
           {item.relatedTo && (
-            <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded flex items-center gap-1">
+            <span className="text-xs px-2 py-0.5 rounded bg-transparent border border-gray-400 text-gray-700 dark:text-gray-300 dark:border-gray-500 flex items-center gap-1">
               <Tag className="h-3 w-3" />
               {item.relatedTo}
             </span>

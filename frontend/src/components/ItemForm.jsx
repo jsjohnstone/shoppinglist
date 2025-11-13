@@ -2,8 +2,9 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode } from 'lucide-react';
+import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText } from 'lucide-react';
 import { api } from '@/lib/api';
 
 // Check if a string looks like a barcode (8-13 digits)
@@ -120,6 +121,8 @@ export function ItemForm({ onAdd, loading }) {
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [processingBarcode, setProcessingBarcode] = useState(false);
   const [barcodeDetected, setBarcodeDetected] = useState(false);
+  const [isMultiAdd, setIsMultiAdd] = useState(false);
+  const [multiAddText, setMultiAddText] = useState('');
   
   const queryClient = useQueryClient();
 
@@ -238,124 +241,252 @@ export function ItemForm({ onAdd, loading }) {
     setShowAutocomplete(false);
   };
 
+  // Parse multi-add text into individual items
+  const parseMultiAddItems = (text) => {
+    const lines = text.split('\n');
+    const items = [];
+    
+    for (const line of lines) {
+      let trimmed = line.trim();
+      
+      // Skip empty lines
+      if (!trimmed) continue;
+      
+      // Remove bullet points and numbers: -, *, 1., 2., etc.
+      trimmed = trimmed.replace(/^[-*]\s*/, ''); // Remove - or *
+      trimmed = trimmed.replace(/^\d+\.\s*/, ''); // Remove 1. 2. etc.
+      trimmed = trimmed.trim();
+      
+      if (trimmed) {
+        items.push(trimmed);
+      }
+    }
+    
+    return items;
+  };
+
+  // Count items from multi-add text
+  const multiAddItemCount = useMemo(() => {
+    if (!isMultiAdd) return 0;
+    return parseMultiAddItems(multiAddText).length;
+  }, [isMultiAdd, multiAddText]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    await onAdd({
-      name,
-      quantity: quantity || undefined,
-      notes: notes || undefined,
-      relatedTo: relatedTo || undefined,
-      category: category || undefined,
-      isBarcode: barcodeDetected,
-    });
+    if (isMultiAdd) {
+      // Multi-add mode: parse items and bulk add
+      const itemTexts = parseMultiAddItems(multiAddText);
+      
+      if (itemTexts.length === 0) {
+        return; // No items to add
+      }
+      
+      if (itemTexts.length > 50) {
+        alert('Maximum 50 items allowed per batch');
+        return;
+      }
+      
+      try {
+        const categoryId = category ? categories.find(c => c.name === category)?.id : null;
+        const result = await api.bulkAddItems(itemTexts, relatedTo || null, categoryId);
+        
+        // Invalidate items query to refetch
+        queryClient.invalidateQueries(['items']);
+        
+        // Show success message
+        console.log(`Added ${result.itemsAdded} items to shopping list`);
+        
+        // Clear form
+        setMultiAddText('');
+        setRelatedTo('');
+        setCategory('');
+        
+        // Reset expanded fields
+        setExpandedFields({
+          quantity: false,
+          notes: false,
+          relatedTo: false,
+          category: false,
+        });
+      } catch (error) {
+        console.error('Error bulk adding items:', error);
+        alert(error.message || 'Failed to add items');
+      }
+    } else {
+      // Single add mode
+      await onAdd({
+        name,
+        quantity: quantity || undefined,
+        notes: notes || undefined,
+        relatedTo: relatedTo || undefined,
+        category: category || undefined,
+        isBarcode: barcodeDetected,
+      });
 
-    // Clear form
-    setName('');
-    setQuantity('');
-    setNotes('');
-    setRelatedTo('');
-    setCategory('');
+      // Clear form
+      setName('');
+      setQuantity('');
+      setNotes('');
+      setRelatedTo('');
+      setCategory('');
+      setBarcodeDetected(false);
+      setProcessingBarcode(false);
+      
+      // Reset expanded fields
+      setExpandedFields({
+        quantity: false,
+        notes: false,
+        relatedTo: false,
+        category: false,
+      });
+    }
+  };
+
+  const toggleMultiAdd = () => {
+    setIsMultiAdd(!isMultiAdd);
+    // Clear relevant fields when toggling
+    if (!isMultiAdd) {
+      // Switching to multi-add mode - clear single-add fields
+      setName('');
+      setQuantity('');
+      setNotes('');
+    } else {
+      // Switching to single-add mode - clear multi-add field
+      setMultiAddText('');
+    }
     setBarcodeDetected(false);
     setProcessingBarcode(false);
-    
-    // Reset expanded fields
-    setExpandedFields({
-      quantity: false,
-      notes: false,
-      relatedTo: false,
-      category: false,
-    });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="relative">
         <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <div className="relative">
-              <Input
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setShowAutocomplete(e.target.value.length >= 2 && !isBarcode(e.target.value));
-                }}
-                onFocus={() => setShowAutocomplete(name.length >= 2 && !isBarcode(name))}
-                onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
-                placeholder="Add an item or scan barcode..."
+          {isMultiAdd ? (
+            // Multi-add mode: Show textarea
+            <div className="flex-1">
+              <Textarea
+                value={multiAddText}
+                onChange={(e) => setMultiAddText(e.target.value)}
+                placeholder="Paste ingredient list (one per line)&#10;Example:&#10;2L Milk&#10;500g Flour&#10;- Eggs&#10;* Bread"
                 required
                 disabled={loading}
-                className="flex-1"
+                rows={8}
+                className="resize-none"
               />
-              {barcodeDetected && (
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                  <Barcode className="h-4 w-4 text-gray-400" />
-                  {processingBarcode && (
-                    <span className="text-xs text-gray-500">Processing...</span>
-                  )}
+              {multiAddItemCount > 0 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {multiAddItemCount} item{multiAddItemCount !== 1 ? 's' : ''} detected
+                  {multiAddItemCount > 50 && ' (max 50 allowed)'}
                 </div>
               )}
             </div>
-            {/* Quick Add Autocomplete - only show if not a barcode */}
-            {showAutocomplete && itemSuggestions.length > 0 && !barcodeDetected && (
-              <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                {itemSuggestions.map((item) => (
-                  <div
-                    key={item.id}
-                    className="px-3 py-2 cursor-pointer hover:bg-gray-100"
-                    onMouseDown={() => handleSelectSuggestion(item)}
-                  >
-                    <div className="font-medium">{item.name}</div>
-                    <div className="text-xs text-gray-500 flex gap-2 mt-1">
-                      {item.quantity && <span>Qty: {item.quantity}</span>}
-                      {item.categoryName && <span>• {item.categoryName}</span>}
-                    </div>
+          ) : (
+            // Single-add mode: Show input
+            <div className="flex-1 relative">
+              <div className="relative">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setShowAutocomplete(e.target.value.length >= 2 && !isBarcode(e.target.value));
+                  }}
+                  onFocus={() => setShowAutocomplete(name.length >= 2 && !isBarcode(name))}
+                  onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
+                  placeholder="Add an item or scan barcode..."
+                  required
+                  disabled={loading}
+                  className="flex-1"
+                />
+                {barcodeDetected && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <Barcode className="h-4 w-4 text-gray-400" />
+                    {processingBarcode && (
+                      <span className="text-xs text-gray-500">Processing...</span>
+                    )}
                   </div>
-                ))}
+                )}
               </div>
+              {/* Quick Add Autocomplete - only show if not a barcode */}
+              {showAutocomplete && itemSuggestions.length > 0 && !barcodeDetected && (
+                <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                  {itemSuggestions.map((item) => (
+                    <div
+                      key={item.id}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      onMouseDown={() => handleSelectSuggestion(item)}
+                    >
+                      <div className="font-medium">{item.name}</div>
+                      <div className="text-xs text-gray-500 flex gap-2 mt-1">
+                        {item.quantity && <span>Qty: {item.quantity}</span>}
+                        {item.categoryName && <span>• {item.categoryName}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={toggleMultiAdd}
+            title={isMultiAdd ? "Switch to single add" : "Switch to multi-add"}
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+          <Button 
+            type="submit" 
+            disabled={loading || (isMultiAdd ? multiAddItemCount === 0 || multiAddItemCount > 50 : !name)}
+          >
+            {isMultiAdd && multiAddItemCount > 0 ? (
+              <>Add All ({multiAddItemCount})</>
+            ) : (
+              <Plus className="h-4 w-4" />
             )}
-          </div>
-          <Button type="submit" disabled={loading || !name}>
-            <Plus className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       {/* Expandable field badges */}
       <div className="flex flex-wrap gap-2">
-        {/* Quantity field */}
-        {!expandedFields.quantity ? (
-          <Badge 
-            variant="interactive"
-            onClick={() => toggleField('quantity')}
-            className="gap-1"
-          >
-            <Scale className="h-3 w-3" />
-            {quantity ? `Quantity: ${quantity}` : 'Quantity'}
-          </Badge>
-        ) : (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <Scale className="h-4 w-4 text-gray-500" />
-            <Input
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Quantity (e.g., 2, 500g)"
-              disabled={loading}
-              className="flex-1 h-8 text-sm"
-              autoFocus
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                toggleField('quantity');
-              }}
+        {/* Quantity field - only show in single-add mode */}
+        {!isMultiAdd && (
+          !expandedFields.quantity ? (
+            <Badge 
+              variant="interactive"
+              onClick={() => toggleField('quantity')}
+              className="gap-1"
             >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
+              <Scale className="h-3 w-3" />
+              {quantity ? `Quantity: ${quantity}` : 'Quantity'}
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Scale className="h-4 w-4 text-gray-500" />
+              <Input
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Quantity (e.g., 2, 500g)"
+                disabled={loading}
+                className="flex-1 h-8 text-sm"
+                autoFocus
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  toggleField('quantity');
+                }}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )
         )}
 
         {/* Category field */}
@@ -410,39 +541,41 @@ export function ItemForm({ onAdd, loading }) {
           )}
         </div>
 
-        {/* Notes field */}
-        {!expandedFields.notes ? (
-          <Badge 
-            variant="interactive"
-            onClick={() => toggleField('notes')}
-            className="gap-1"
-          >
-            <StickyNote className="h-3 w-3" />
-            {notes ? `Notes: ${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
-          </Badge>
-        ) : (
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <StickyNote className="h-4 w-4 text-gray-500" />
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Additional notes..."
-              disabled={loading}
-              className="flex-1 h-8 text-sm"
-              autoFocus
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => {
-                toggleField('notes');
-              }}
+        {/* Notes field - only show in single-add mode */}
+        {!isMultiAdd && (
+          !expandedFields.notes ? (
+            <Badge 
+              variant="interactive"
+              onClick={() => toggleField('notes')}
+              className="gap-1"
             >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
+              <StickyNote className="h-3 w-3" />
+              {notes ? `Notes: ${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
+            </Badge>
+          ) : (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <StickyNote className="h-4 w-4 text-gray-500" />
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes..."
+                disabled={loading}
+                className="flex-1 h-8 text-sm"
+                autoFocus
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  toggleField('notes');
+                }}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )
         )}
       </div>
     </form>

@@ -34,16 +34,17 @@ export async function normalizeItemName(itemName, existingQuantity = null) {
 
   try {
     const model = await getModel();
-    const prompt = `You are a shopping list assistant. Process this product and extract:
-1. Generic item name (remove brands, but keep important descriptors)
+    const prompt = `You are a shopping list assistant. Process this ingredient/product and extract:
+1. Generic item name (remove brands, bullets, numbers, but keep important descriptors)
 2. Quantity (if mentioned and not already specified separately)
-3. Important notes (like "boneless", "skinless", "organic", preparation details)
+3. Important notes (like "boneless", "skinless", "organic", "self-raising", preparation details)
 
 IMPORTANT RULES:
 - Remove brand names (Skippy, Heinz, Organic Valley, etc.)
-- Keep useful descriptors (boneless, skinless, crunchy, Greek, etc.)
-- Extract quantity from the name if present and not specified separately
-- Keep preparation/quality info in notes (boneless and skinless, free-range, etc.)
+- Remove bullet points (-, *, numbers like 1., 2., etc.)
+- Keep useful descriptors (boneless, skinless, crunchy, Greek, self-raising, etc.)
+- Extract quantity from the name if present (e.g., "2L", "500g", "3 cups")
+- Keep preparation/quality info in notes (boneless and skinless, self-raising, free-range, etc.)
 
 Respond in this EXACT format on separate lines:
 NAME: [generic name]
@@ -56,17 +57,27 @@ NAME: Peanut Butter
 QUANTITY: 500g
 NOTES: Crunchy
 
-Input: "Organic Valley 2% Milk 1L"
+Input: "2L Milk"
 NAME: Milk
-QUANTITY: 1L
-NOTES: 2% fat
+QUANTITY: 2L
+NOTES: NONE
 
-Input: "Butterball Boneless Skinless Chicken Thighs"
-NAME: Chicken Thighs
+Input: "500g self-raising flour"
+NAME: Flour
+QUANTITY: 500g
+NOTES: Self-raising
+
+Input: "- 3 Eggs"
+NAME: Eggs
+QUANTITY: 3
+NOTES: NONE
+
+Input: "* Butter"
+NAME: Butter
 QUANTITY: NONE
-NOTES: Boneless and skinless
+NOTES: NONE
 
-Input: "Granny Smith Apples"
+Input: "1. Granny Smith Apples"
 NAME: Apples
 QUANTITY: NONE
 NOTES: Granny Smith variety

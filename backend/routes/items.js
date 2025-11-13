@@ -79,6 +79,97 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Bulk add items (with async LLM processing for each item)
+router.post('/bulk-add', authenticateToken, async (req, res) => {
+  try {
+    const { items: itemTexts, relatedTo, categoryId } = req.body;
+
+    // Validation
+    if (!Array.isArray(itemTexts) || itemTexts.length === 0) {
+      return res.status(400).json({ error: 'Items array is required and must not be empty' });
+    }
+
+    if (itemTexts.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 items allowed per batch' });
+    }
+
+    // Validate all items are non-empty strings
+    const validItemTexts = itemTexts.filter(text => 
+      typeof text === 'string' && text.trim().length > 0
+    );
+
+    if (validItemTexts.length === 0) {
+      return res.status(400).json({ error: 'No valid items to add' });
+    }
+
+    // Check if Ollama is enabled
+    const ollamaEnabled = await isOllamaEnabled();
+
+    // Create all items immediately with processing flag
+    const createdItems = [];
+    for (const itemText of validItemTexts) {
+      const [newItem] = await db.insert(items)
+        .values({
+          name: itemText.trim(),
+          quantity: null,
+          notes: null,
+          relatedTo: relatedTo || null,
+          categoryId: categoryId || null,
+          isProcessing: ollamaEnabled,
+          addedBy: req.user.id,
+        })
+        .returning();
+      
+      createdItems.push(newItem);
+    }
+
+    // Fetch all created items with category names
+    const itemsWithCategories = await Promise.all(
+      createdItems.map(async (item) => {
+        const [itemWithCategory] = await db.select({
+          id: items.id,
+          name: items.name,
+          quantity: items.quantity,
+          notes: items.notes,
+          relatedTo: items.relatedTo,
+          categoryId: items.categoryId,
+          categoryName: categories.name,
+          isCompleted: items.isCompleted,
+          isProcessing: items.isProcessing,
+          barcode: items.barcode,
+          wasScanned: items.wasScanned,
+          completedAt: items.completedAt,
+          createdAt: items.createdAt,
+          updatedAt: items.updatedAt,
+        })
+        .from(items)
+        .leftJoin(categories, eq(items.categoryId, categories.id))
+        .where(eq(items.id, item.id))
+        .limit(1);
+        
+        return itemWithCategory;
+      })
+    );
+
+    // Return immediately with processing state
+    res.status(201).json({
+      success: true,
+      itemsAdded: createdItems.length,
+      items: itemsWithCategories,
+    });
+
+    // Process each item asynchronously if Ollama is enabled
+    if (ollamaEnabled) {
+      for (const item of createdItems) {
+        processItemAsync(item.id, item.name, null, null, null);
+      }
+    }
+  } catch (error) {
+    console.error('Error bulk adding items:', error);
+    res.status(500).json({ error: 'Failed to bulk add items' });
+  }
+});
+
 // Add new item (with async LLM processing or barcode processing)
 router.post('/', authenticateToken, async (req, res) => {
   try {

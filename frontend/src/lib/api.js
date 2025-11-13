@@ -81,6 +81,13 @@ class ApiClient {
     });
   }
 
+  async bulkAddItems(items, relatedTo, categoryId) {
+    return this.request('/items/bulk-add', {
+      method: 'POST',
+      body: JSON.stringify({ items, relatedTo, categoryId }),
+    });
+  }
+
   async updateItem(id, itemData) {
     return this.request(`/items/${id}`, {
       method: 'PUT',

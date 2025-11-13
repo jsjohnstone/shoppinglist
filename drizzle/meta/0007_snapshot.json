@@ -1,0 +1,14 @@
+{
+  "id": "0007_update_categories",
+  "prevId": "0006_add_device_events",
+  "version": "5",
+  "dialect": "pg",
+  "tables": {},
+  "enums": {},
+  "schemas": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}

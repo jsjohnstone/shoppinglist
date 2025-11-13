@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LoginForm } from '@/components/Auth/LoginForm';
 import { RegisterForm } from '@/components/Auth/RegisterForm';
 import { ItemList } from '@/components/ItemList';
 import { ItemForm } from '@/components/ItemForm';
 import { Settings } from '@/components/Settings';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { SSEClient } from '@/lib/sseClient';
+import { queueManager } from '@/lib/queueManager';
+import { initDB } from '@/lib/db';
 import { LogOut, ShoppingCart, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
 
 const queryClient = new QueryClient();
@@ -21,7 +25,10 @@ function ShoppingListApp() {
     if (saved !== null) return saved === 'true';
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [queueCount, setQueueCount] = useState(0);
   const queryClient = useQueryClient();
+  const sseClient = useRef(null);
 
   // Apply dark mode class to document
   useEffect(() => {
@@ -32,6 +39,63 @@ function ShoppingListApp() {
     }
     localStorage.setItem('darkMode', darkMode.toString());
   }, [darkMode]);
+
+  // Initialize IndexedDB
+  useEffect(() => {
+    initDB();
+  }, []);
+
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Update queue count
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const count = await queueManager.getQueueCount();
+      setQueueCount(count);
+    }, 2000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // SSE connection for real-time updates
+  useEffect(() => {
+    if (!user) return;
+    
+    sseClient.current = new SSEClient(
+      // onMessage
+      (event) => {
+        // Invalidate queries to refetch data
+        if (event.type === 'item_added' || 
+            event.type === 'item_updated' || 
+            event.type === 'item_deleted' ||
+            event.type === 'item_toggled') {
+          queryClient.invalidateQueries(['items']);
+        }
+      },
+      // onError
+      (error) => {
+        console.error('SSE error:', error);
+      }
+    );
+    
+    sseClient.current.connect(api.token);
+    
+    return () => {
+      sseClient.current?.disconnect();
+    };
+  }, [user, queryClient]);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -86,33 +150,67 @@ function ShoppingListApp() {
     enabled: !!user,
   });
 
-  // Add item mutation
+  // Add item mutation with offline support
   const addItemMutation = useMutation({
-    mutationFn: (itemData) => api.addItem(itemData),
+    mutationFn: async (itemData) => {
+      const result = await queueManager.queueOperation({
+        type: 'add',
+        data: itemData
+      });
+      
+      if (!result.success && result.queued) {
+        // Return optimistic data for offline
+        return { ...itemData, id: `temp-${Date.now()}`, isQueued: true };
+      }
+      
+      return result.result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Toggle complete mutation
+  // Toggle complete mutation with offline support
   const toggleCompleteMutation = useMutation({
-    mutationFn: (id) => api.toggleItemComplete(id),
+    mutationFn: async (id) => {
+      const result = await queueManager.queueOperation({
+        type: 'toggle',
+        id
+      });
+      
+      return result.success ? result.result : null;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Delete item mutation
+  // Delete item mutation with offline support
   const deleteItemMutation = useMutation({
-    mutationFn: (id) => api.deleteItem(id),
+    mutationFn: async (id) => {
+      const result = await queueManager.queueOperation({
+        type: 'delete',
+        id
+      });
+      
+      return result.success ? result.result : null;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Update item mutation
+  // Update item mutation with offline support
   const updateItemMutation = useMutation({
-    mutationFn: ({ id, data }) => api.updateItem(id, data),
+    mutationFn: async ({ id, data }) => {
+      const result = await queueManager.queueOperation({
+        type: 'update',
+        id,
+        data
+      });
+      
+      return result.success ? result.result : null;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
@@ -134,6 +232,8 @@ function ShoppingListApp() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <OfflineBanner isOnline={isOnline} queueCount={queueCount} />
+      
       <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
         <div className="max-w-4xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
           {/* Left side */}

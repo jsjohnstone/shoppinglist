@@ -11,6 +11,61 @@ import { logDeviceEvent } from '../services/deviceEvents.js';
 
 const router = express.Router();
 
+// SSE connections store
+const sseClients = new Set();
+
+// Helper to broadcast to all clients of a specific user
+function broadcastToUser(userId, event) {
+  sseClients.forEach(client => {
+    if (client.userId === userId) {
+      try {
+        client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch (error) {
+        console.error('Error broadcasting to client:', error);
+        sseClients.delete(client);
+      }
+    }
+  });
+}
+
+// SSE endpoint for real-time updates
+router.get('/events', authenticateToken, (req, res) => {
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no', // Disable nginx buffering
+  });
+
+  // Add client to set
+  const clientId = Date.now();
+  const client = { id: clientId, userId: req.user.userId, res };
+  sseClients.add(client);
+
+  console.log(`SSE client connected: ${clientId} for user ${req.user.userId}`);
+
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
+
+  // Heartbeat to keep connection alive
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: heartbeat\n\n`);
+    } catch (error) {
+      clearInterval(heartbeat);
+      sseClients.delete(client);
+    }
+  }, 30000);
+
+  // Clean up on disconnect
+  req.on('close', () => {
+    console.log(`SSE client disconnected: ${clientId}`);
+    clearInterval(heartbeat);
+    sseClients.delete(client);
+  });
+});
+
 // Helper function to find or create category
 async function findOrCreateCategory(categoryName) {
   if (!categoryName) return null;
@@ -226,6 +281,14 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Return immediately with processing state
     res.status(201).json(itemWithCategory);
+
+    // Broadcast to all users
+    if (req.user?.userId) {
+      broadcastToUser(req.user.userId, {
+        type: 'item_added',
+        item: itemWithCategory,
+      });
+    }
 
     // Process asynchronously only if Ollama is enabled
     if (shouldProcess) {
@@ -644,6 +707,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
     .limit(1);
 
     res.json(itemWithCategory);
+
+    // Broadcast to all users
+    if (req.user?.userId) {
+      broadcastToUser(req.user.userId, {
+        type: 'item_updated',
+        item: itemWithCategory,
+      });
+    }
   } catch (error) {
     console.error('Error updating item:', error);
     res.status(500).json({ error: 'Failed to update item' });
@@ -677,6 +748,14 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
       .returning();
 
     res.json(updatedItem);
+
+    // Broadcast to all users
+    if (req.user?.userId) {
+      broadcastToUser(req.user.userId, {
+        type: 'item_toggled',
+        item: updatedItem,
+      });
+    }
   } catch (error) {
     console.error('Error toggling item completion:', error);
     res.status(500).json({ error: 'Failed to toggle completion' });
@@ -697,6 +776,14 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     res.json({ message: 'Item deleted successfully' });
+
+    // Broadcast to all users
+    if (req.user?.userId) {
+      broadcastToUser(req.user.userId, {
+        type: 'item_deleted',
+        itemId: parseInt(id),
+      });
+    }
   } catch (error) {
     console.error('Error deleting item:', error);
     res.status(500).json({ error: 'Failed to delete item' });

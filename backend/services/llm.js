@@ -34,22 +34,34 @@ export async function normalizeItemName(itemName, existingQuantity = null) {
 
   try {
     const model = await getModel();
-    const prompt = `You are a shopping list assistant. Process this ingredient/product and extract:
-1. Generic item name (remove brands, bullets, numbers, but keep important descriptors)
-2. Quantity (if mentioned and not already specified separately)
-3. Important notes (like "boneless", "skinless", "organic", "self-raising", preparation details)
+    const prompt = `You are a shopping list assistant. Process this grocery item and extract:
+1. Generic item name (remove brands, bullets, numbers, but keep essential product type)
+2. Quantity (if mentioned in the text)
+3. Notes (ONLY essential product characteristics - variety, preparation type, or specific requirements)
 
-IMPORTANT RULES:
-- Remove brand names (Skippy, Heinz, Organic Valley, etc.)
-- Remove bullet points (-, *, numbers like 1., 2., etc.)
-- Keep useful descriptors (boneless, skinless, crunchy, Greek, self-raising, etc.)
-- Extract quantity from the name if present (e.g., "2L", "500g", "3 cups")
-- Keep preparation/quality info in notes (boneless and skinless, self-raising, free-range, etc.)
+CRITICAL RULES FOR NOTES:
+- ONLY include notes for essential product characteristics (variety, preparation type, cut, fat content)
+- DO NOT add descriptions, opinions, marketing language, or recipes
+- DO NOT add subjective comments (delicious, healthy, tasty, etc.)
+- DO NOT add usage suggestions or preparation ideas
+- MOST items should have NOTES: NONE - only add notes when truly necessary
+- Keep notes to 2-3 words maximum
+- Notes are for product specifications, NOT commentary
+
+Examples of GOOD notes:
+- "Boneless", "Skinless", "Self-raising", "Greek style", "Crunchy", "Extra virgin"
+- "Free-range", "Organic", "Low-fat", "Wholemeal", "Granny Smith variety"
+
+Examples of BAD notes (NEVER do this):
+- "Delicious and healthy" ❌
+- "Perfect for recipes" ❌  
+- "Nutritious option" ❌
+- "Great for cooking" ❌
 
 Respond in this EXACT format on separate lines:
 NAME: [generic name]
 QUANTITY: [quantity or NONE]
-NOTES: [important info or NONE]
+NOTES: [brief characteristic or NONE]
 
 Examples:
 Input: "Skippy Super Chunk Peanut Butter 500g"
@@ -62,25 +74,55 @@ NAME: Milk
 QUANTITY: 2L
 NOTES: NONE
 
+Input: "Dog Food"
+NAME: Dog Food
+QUANTITY: NONE
+NOTES: NONE
+
 Input: "500g self-raising flour"
 NAME: Flour
 QUANTITY: 500g
 NOTES: Self-raising
+
+Input: "Organic Free-Range Eggs"
+NAME: Eggs
+QUANTITY: NONE
+NOTES: Organic, free-range
 
 Input: "- 3 Eggs"
 NAME: Eggs
 QUANTITY: 3
 NOTES: NONE
 
-Input: "* Butter"
-NAME: Butter
+Input: "Greek Yogurt"
+NAME: Yogurt
+QUANTITY: NONE
+NOTES: Greek style
+
+Input: "Cat Food"
+NAME: Cat Food
 QUANTITY: NONE
 NOTES: NONE
+
+Input: "Chicken Breast"
+NAME: Chicken Breast
+QUANTITY: NONE
+NOTES: NONE
+
+Input: "Boneless Skinless Chicken Thighs"
+NAME: Chicken Thighs
+QUANTITY: NONE
+NOTES: Boneless, skinless
 
 Input: "1. Granny Smith Apples"
 NAME: Apples
 QUANTITY: NONE
-NOTES: Granny Smith variety
+NOTES: Granny Smith
+
+Input: "Bread"
+NAME: Bread
+QUANTITY: NONE
+NOTES: NONE
 
 ${existingQuantity ? `Note: Quantity already specified as "${existingQuantity}", so only extract if different or more specific.\n` : ''}
 Product: ${itemName}`;

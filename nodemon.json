@@ -1,0 +1,9 @@
+{
+  "watch": ["backend"],
+  "ext": "js,json",
+  "ignore": ["backend/node_modules", "*.test.js"],
+  "exec": "node backend/server.js",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

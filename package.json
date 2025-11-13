@@ -1,0 +1,31 @@
+{
+  "name": "shoppinglist",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shopping list app with API and web frontend",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "node backend/server.js",
+    "migrate": "node backend/db/migrate.js",
+    "db:generate": "drizzle-kit generate:pg"
+  },
+  "keywords": ["shopping", "list", "groceries"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "drizzle-orm": "^0.29.1",
+    "postgres": "^3.4.3",
+    "node-cron": "^3.0.3",
+    "ollama": "^0.5.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.20.6",
+    "nodemon": "^3.0.1"
+  }
+}

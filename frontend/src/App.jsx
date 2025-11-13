@@ -7,7 +7,7 @@ import { ItemForm } from '@/components/ItemForm';
 import { Settings } from '@/components/Settings';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
-import { LogOut, ShoppingCart, Settings as SettingsIcon } from 'lucide-react';
+import { LogOut, ShoppingCart, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
@@ -15,7 +15,23 @@ function ShoppingListApp() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [showSettings, setShowSettings] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Check localStorage or system preference
+    const saved = localStorage.getItem('darkMode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const queryClient = useQueryClient();
+
+  // Apply dark mode class to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode.toString());
+  }, [darkMode]);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -117,24 +133,29 @@ function ShoppingListApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
         <div className="max-w-4xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
           {/* Left side */}
           <div className="flex items-center gap-2">
             {/* Logo icon - always visible */}
-            <ShoppingCart className="h-6 w-6 text-blue-600" />
+            <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             
-            {/* Title - hidden on mobile */}
-            <h1 className="hidden md:block text-2xl font-bold">Shopping List</h1>
+            {/* Title - visible on all screen sizes */}
+            <h1 className="text-xl md:text-2xl font-bold dark:text-white">Shopping List</h1>
           </div>
           
           {/* Right side */}
           <div className="flex items-center gap-2 md:gap-4">
             {/* Welcome message - hidden on mobile */}
-            <span className="hidden md:inline text-sm text-gray-600">
+            <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300">
               Hello, {user.username}!
             </span>
+            
+            {/* Dark mode toggle */}
+            <Button variant="ghost" size="sm" onClick={() => setDarkMode(!darkMode)}>
+              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             
             {/* Settings button */}
             <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
@@ -151,8 +172,8 @@ function ShoppingListApp() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8 bg-white rounded-lg border p-4 shadow-sm">
+      <main className="max-w-4xl mx-auto px-4 py-4">
+        <div className="mb-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 shadow-sm">
           <ItemForm
             onAdd={addItemMutation.mutateAsync}
             loading={addItemMutation.isPending}

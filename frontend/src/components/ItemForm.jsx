@@ -45,10 +45,10 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
 
   return (
     <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
-      <div className="bg-white border rounded-md shadow-lg">
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg">
         {/* Search input */}
-        <div className="p-2 border-b flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-gray-500" />}
+        <div className="p-2 border-b dark:border-gray-600 flex items-center gap-2">
+          {Icon && <Icon className="h-4 w-4 text-gray-500 dark:text-gray-400" />}
           <Input
             ref={inputRef}
             value={searchValue}
@@ -84,7 +84,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
             {filteredOptions.map((option) => (
               <div
                 key={option}
-                className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm"
+                className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200"
                 onClick={() => handleSelect(option)}
               >
                 {option}
@@ -92,7 +92,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
             ))}
             {showCreateOption && (
               <div
-                className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-sm text-blue-600 flex items-center gap-2"
+                className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2"
                 onClick={handleCreate}
               >
                 <Plus className="h-4 w-4" />
@@ -103,7 +103,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
         )}
         
         {filteredOptions.length === 0 && !showCreateOption && searchValue && (
-          <div className="px-3 py-4 text-sm text-gray-500 text-center">
+          <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400 text-center">
             No results found
           </div>
         )}
@@ -410,15 +410,15 @@ export function ItemForm({ onAdd, loading }) {
               </div>
               {/* Quick Add Autocomplete - only show if not a barcode */}
               {showAutocomplete && itemSuggestions.length > 0 && !barcodeDetected && (
-                <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
                   {itemSuggestions.map((item) => (
                     <div
                       key={item.id}
-                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                       onMouseDown={() => handleSelectSuggestion(item)}
                     >
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-xs text-gray-500 flex gap-2 mt-1">
+                      <div className="font-medium dark:text-gray-100">{item.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 flex gap-2 mt-1">
                         {item.quantity && <span>Qty: {item.quantity}</span>}
                         {item.categoryName && <span>• {item.categoryName}</span>}
                       </div>
@@ -458,10 +458,10 @@ export function ItemForm({ onAdd, loading }) {
             <Badge 
               variant="interactive"
               onClick={() => toggleField('quantity')}
-              className="gap-1"
+              className={`gap-1 ${quantity ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
             >
               <Scale className="h-3 w-3" />
-              {quantity ? `Quantity: ${quantity}` : 'Quantity'}
+              {quantity ? quantity : 'Quantity'}
             </Badge>
           ) : (
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -494,10 +494,10 @@ export function ItemForm({ onAdd, loading }) {
           <Badge 
             variant="interactive"
             onClick={() => toggleField('category')}
-            className="gap-1"
+            className={`gap-1 ${category ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
           >
             <FolderOpen className="h-3 w-3" />
-            {category ? `Category: ${category}` : 'Category'}
+            {category ? category : 'Category'}
           </Badge>
           {expandedFields.category && (
             <SimpleAutocomplete
@@ -520,10 +520,10 @@ export function ItemForm({ onAdd, loading }) {
           <Badge 
             variant="interactive"
             onClick={() => toggleField('relatedTo')}
-            className="gap-1"
+            className={`gap-1 ${relatedTo ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
           >
             <Tag className="h-3 w-3" />
-            {relatedTo ? `Related: ${relatedTo}` : 'Related To'}
+            {relatedTo ? relatedTo : 'Related To'}
           </Badge>
           {expandedFields.relatedTo && (
             <SimpleAutocomplete
@@ -547,10 +547,10 @@ export function ItemForm({ onAdd, loading }) {
             <Badge 
               variant="interactive"
               onClick={() => toggleField('notes')}
-              className="gap-1"
+              className={`gap-1 ${notes ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
             >
               <StickyNote className="h-3 w-3" />
-              {notes ? `Notes: ${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
+              {notes ? `${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
             </Badge>
           ) : (
             <div className="flex items-center gap-2 flex-1 min-w-0">

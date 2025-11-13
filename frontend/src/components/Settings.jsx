@@ -190,18 +190,18 @@ export function Settings({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-white flex flex-col">
-        <div className="p-6 border-b">
+      <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Settings</h2>
+            <h2 className="text-2xl font-bold dark:text-white">Settings</h2>
             <Button variant="ghost" onClick={onClose}>×</Button>
           </div>
           
           {/* Tabs */}
-          <div className="flex gap-2 mt-4 border-b -mb-6">
+          <div className="flex gap-2 mt-4 border-b dark:border-gray-700 -mb-6">
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'api-keys' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+                activeTab === 'api-keys' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
               onClick={() => setActiveTab('api-keys')}
             >
@@ -209,7 +209,7 @@ export function Settings({ onClose }) {
             </button>
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'devices' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+                activeTab === 'devices' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
               onClick={() => setActiveTab('devices')}
             >
@@ -217,7 +217,7 @@ export function Settings({ onClose }) {
             </button>
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'home-assistant' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+                activeTab === 'home-assistant' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
               onClick={() => setActiveTab('home-assistant')}
             >
@@ -225,7 +225,7 @@ export function Settings({ onClose }) {
             </button>
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'llm' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+                activeTab === 'llm' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
               onClick={() => setActiveTab('llm')}
             >
@@ -233,7 +233,7 @@ export function Settings({ onClose }) {
             </button>
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'tts' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+                activeTab === 'tts' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
               onClick={() => setActiveTab('tts')}
             >
@@ -246,7 +246,7 @@ export function Settings({ onClose }) {
           {/* API Keys Tab */}
           {activeTab === 'api-keys' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 API keys allow external apps (like barcode scanners) to add items to your shopping list.
               </p>
 
@@ -275,9 +275,9 @@ export function Settings({ onClose }) {
                     <Card key={key.id} className="p-4">
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium">{key.name}</div>
-                          <div className="text-sm text-gray-600 font-mono truncate">{key.key}</div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="font-medium dark:text-gray-100">{key.name}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400 font-mono truncate">{key.key}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                             Created: {new Date(key.createdAt).toLocaleDateString()}
                           </div>
                         </div>
@@ -300,7 +300,7 @@ export function Settings({ onClose }) {
           {/* Devices Tab */}
           {activeTab === 'devices' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Manage barcode scanner devices that connect to your shopping list.
               </p>
 
@@ -317,15 +317,15 @@ export function Settings({ onClose }) {
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium">{device.friendly_name || device.device_id}</span>
+                            <span className="font-medium dark:text-gray-100">{device.friendly_name || device.device_id}</span>
                             {getDeviceStatusBadge(device)}
                           </div>
-                          <div className="text-sm text-gray-600">ID: {device.device_id}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">ID: {device.device_id}</div>
                           {device.ha_speaker_entity && (
-                            <div className="text-sm text-gray-600">Speaker: {device.ha_speaker_entity}</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400">Speaker: {device.ha_speaker_entity}</div>
                           )}
                           {device.last_seen && (
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                               Last seen: {new Date(device.last_seen).toLocaleString()}
                             </div>
                           )}
@@ -349,8 +349,8 @@ export function Settings({ onClose }) {
               {/* Device Approval Modal */}
               {selectedDevice && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                  <Card className="w-full max-w-md p-6 bg-white">
-                    <h3 className="text-lg font-bold mb-4">Approve Device</h3>
+                  <Card className="w-full max-w-md p-6">
+                    <h3 className="text-lg font-bold mb-4 dark:text-white">Approve Device</h3>
                     <form onSubmit={(e) => {
                       e.preventDefault();
                       const formData = new FormData(e.target);
@@ -413,7 +413,7 @@ export function Settings({ onClose }) {
           {/* Home Assistant Tab */}
           {activeTab === 'home-assistant' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Configure Home Assistant integration for TTS announcements.
               </p>
 
@@ -487,7 +487,7 @@ export function Settings({ onClose }) {
           {/* LLM Configuration Tab */}
           {activeTab === 'llm' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Configure external Ollama for AI-powered item categorization and normalization.
               </p>
 
@@ -598,7 +598,7 @@ export function Settings({ onClose }) {
           {activeTab === 'tts' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Customize the TTS messages announced when items are scanned.
                 </p>
                 <Button variant="outline" size="sm" onClick={() => resetTTSPhrasesMutation.mutate()}>

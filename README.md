@@ -88,9 +88,19 @@ docker-compose -f docker-compose.dev.yml down
 - Frontend changes update instantly in browser (Hot Module Replacement)
 - Database schema changes require running migrations
 
+### Frontend-Only Development (with Remote Backend)
+
+If you want to develop just the frontend while connecting to a remote backend (e.g., deployed on Proxmox):
+
+See **[FRONTEND_DEV_SETUP.md](FRONTEND_DEV_SETUP.md)** for detailed instructions on:
+- Running frontend dev server locally with hot reload
+- Connecting to remote backend API
+- Environment configuration
+- Troubleshooting CORS and network issues
+
 ### Alternative: Local Development (without Docker)
 
-If you prefer to run services locally:
+If you prefer to run all services locally without Docker:
 
 ### 1. Install dependencies
 

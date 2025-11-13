@@ -1,4 +1,8 @@
-const API_URL = '/api';
+// Support configurable backend URL for remote development
+// In production, this will be empty (relative URLs)
+// For local dev with remote backend, set VITE_API_URL in .env.local
+const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_URL = `${API_BASE}/api`;
 
 class ApiClient {
   constructor() {

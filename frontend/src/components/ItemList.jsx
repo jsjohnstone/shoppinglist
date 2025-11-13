@@ -46,9 +46,9 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
 
   return (
     <div className="absolute top-full left-0 mt-1 z-50 min-w-[200px]">
-      <div className="bg-white border rounded-md shadow-lg max-h-48 overflow-auto">
-        <div className="p-2 border-b flex items-center gap-2">
-          {Icon && <Icon className="h-3 w-3 text-gray-500" />}
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg max-h-48 overflow-auto">
+        <div className="p-2 border-b dark:border-gray-600 flex items-center gap-2">
+          {Icon && <Icon className="h-3 w-3 text-gray-500 dark:text-gray-400" />}
           <Input
             ref={inputRef}
             value={searchValue}
@@ -67,7 +67,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
         {filteredOptions.map((option) => (
           <div
             key={option}
-            className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-xs"
+            className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-xs dark:text-gray-200"
             onClick={() => onSelect(option)}
           >
             {option}
@@ -75,7 +75,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
         ))}
         {showCreateOption && (
           <div
-            className="px-3 py-2 cursor-pointer hover:bg-gray-100 text-xs text-blue-600"
+            className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-xs text-blue-600 dark:text-blue-400"
             onClick={() => {
               onCreateNew(searchValue);
               onSelect(searchValue);
@@ -168,7 +168,7 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
       <div 
         ref={setNodeRef}
         style={style}
-        className="flex items-start gap-3 p-3 border-b last:border-b-0 bg-blue-50"
+        className="flex items-start gap-3 p-3 border-b dark:border-gray-700 last:border-b-0 bg-blue-50 dark:bg-blue-900/20"
       >
         <div className="flex-1 space-y-2">
           {/* Name */}
@@ -287,66 +287,63 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 border-b last:border-b-0 ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''}`}
+      {...attributes}
+      {...listeners}
+      className={`flex items-center gap-3 p-3 border-b last:border-b-0 ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'} touch-none`}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-none"
-      >
-        <GripVertical className="h-4 w-4 text-gray-400" />
-      </div>
       <Checkbox
         checked={item.isCompleted}
         onCheckedChange={() => onToggleComplete(item.id)}
-        className="mt-1"
+        className="self-start mt-0.5"
         disabled={item.isProcessing}
       />
       <div className="flex-1 min-w-0">
-        <div className={`font-medium flex items-center gap-2 ${item.isCompleted ? 'line-through' : ''}`}>
+        <div className={`font-medium flex items-center gap-2 dark:text-gray-100 ${item.isCompleted ? 'line-through' : ''}`}>
           {item.isProcessing && (
-            <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+            <Loader2 className="h-4 w-4 animate-spin text-blue-500 dark:text-blue-400" />
           )}
           {item.name}
-          {item.quantity && <span className="ml-2 text-sm text-gray-600">({item.quantity})</span>}
-        </div>
-        {item.notes && <div className="text-sm text-gray-600">{item.notes}</div>}
-        <div className="flex gap-2 mt-1">
-          {item.isProcessing && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded flex items-center gap-1">
-              Processing...
-            </span>
-          )}
-          {item.wasScanned && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded flex items-center gap-1">
-              <Barcode className="h-3 w-3" />
-            </span>
-          )}
           {item.quantity && (
-            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded flex items-center gap-1">
+            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
               <Scale className="h-3 w-3" />
               {item.quantity}
             </span>
           )}
+        </div>
+        {item.notes && <div className="text-sm text-gray-600 dark:text-gray-400">{item.notes}</div>}
+        <div className="flex gap-2 mt-1">
+          {item.isProcessing && (
+            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded flex items-center gap-1">
+              Processing...
+            </span>
+          )}
+          {item.wasScanned && (
+            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
+              <Barcode className="h-3 w-3" />
+            </span>
+          )}
           {item.categoryName && (
-            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded flex items-center gap-1">
+            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded flex items-center gap-1">
               <FolderOpen className="h-3 w-3" />
               {item.categoryName}
             </span>
           )}
           {item.relatedTo && (
-            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded flex items-center gap-1">
+            <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded flex items-center gap-1">
               <Tag className="h-3 w-3" />
               {item.relatedTo}
             </span>
           )}
         </div>
       </div>
-      <div className="flex gap-1">
+      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setIsEditing(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsEditing(true);
+          }}
           disabled={loading || item.isProcessing}
         >
           <Edit2 className="h-4 w-4 text-blue-600" />
@@ -354,7 +351,10 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onDelete(item.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(item.id);
+          }}
           disabled={loading || item.isProcessing}
         >
           <Trash2 className="h-4 w-4 text-red-600" />
@@ -373,7 +373,12 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   const queryClient = useQueryClient();
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -517,12 +522,12 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     return (
       <Card key={title}>
         <div 
-          className={`p-4 border-b flex items-center justify-between cursor-pointer ${
-            categoryName ? 'bg-gradient-to-r from-blue-50 to-indigo-50' : 'bg-gray-50'
+          className={`p-4 border-b dark:border-gray-700 flex items-center justify-between cursor-pointer ${
+            categoryName ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20' : 'bg-gray-50 dark:bg-gray-800'
           }`}
           onClick={() => categoryName && toggleCategory(categoryName)}
         >
-          <h2 className="font-semibold flex items-center gap-2">
+          <h2 className="font-semibold flex items-center gap-2 dark:text-gray-100">
             {categoryName && (
               isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
             )}

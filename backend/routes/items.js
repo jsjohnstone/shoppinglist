@@ -487,43 +487,58 @@ router.post('/barcode', authenticateDevice, async (req, res) => {
   }
 });
 
-// Add item via API key (for external apps like barcode scanner)
+// Add item via API key (for external apps like Home Assistant)
 router.post('/api-add', authenticateApiKey, async (req, res) => {
   try {
-    const { name, quantity, notes, relatedTo, category } = req.body;
+    const { name, quantity, notes, relatedTo, category, skipLlm } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Item name is required' });
     }
 
-    let finalName = name;
-    let categoryId = null;
+    // Check if Ollama is enabled
+    const ollamaEnabled = await isOllamaEnabled();
+    const shouldProcess = ollamaEnabled && !skipLlm;
 
-    // Process with LLM
-    try {
-      const { normalizedName, suggestedCategory } = await processItem(name);
-      finalName = normalizedName;
-      const categoryToUse = category || suggestedCategory;
-      categoryId = await findOrCreateCategory(categoryToUse);
-    } catch (llmError) {
-      console.error('LLM processing failed:', llmError);
-      if (category) {
-        categoryId = await findOrCreateCategory(category);
-      }
-    }
-
+    // First, add the item immediately with processing flag
     const [newItem] = await db.insert(items)
       .values({
-        name: finalName,
+        name: name,
         quantity: quantity || null,
         notes: notes || null,
         relatedTo: relatedTo || null,
-        categoryId,
+        categoryId: category ? await findOrCreateCategory(category) : null,
+        isProcessing: shouldProcess,
         addedBy: null, // External API, no user
       })
       .returning();
 
-    res.status(201).json(newItem);
+    // Fetch with category name for immediate response
+    const [itemWithCategory] = await db.select({
+      id: items.id,
+      name: items.name,
+      quantity: items.quantity,
+      notes: items.notes,
+      relatedTo: items.relatedTo,
+      categoryId: items.categoryId,
+      categoryName: categories.name,
+      isCompleted: items.isCompleted,
+      isProcessing: items.isProcessing,
+      createdAt: items.createdAt,
+      updatedAt: items.updatedAt,
+    })
+    .from(items)
+    .leftJoin(categories, eq(items.categoryId, categories.id))
+    .where(eq(items.id, newItem.id))
+    .limit(1);
+
+    // Return immediately with processing state
+    res.status(201).json(itemWithCategory);
+
+    // Process asynchronously if Ollama is enabled and not skipped
+    if (shouldProcess) {
+      processItemAsync(newItem.id, name, quantity, notes, category);
+    }
   } catch (error) {
     console.error('Error adding item via API:', error);
     res.status(500).json({ error: 'Failed to add item' });

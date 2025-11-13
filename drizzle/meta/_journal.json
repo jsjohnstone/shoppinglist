@@ -29,6 +29,13 @@
       "when": 1763046146346,
       "tag": "0003_slimy_human_robot",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1731516713000,
+      "tag": "0004_add_device_tables",
+      "breakpoints": true
     }
   ]
 }

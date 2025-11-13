@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "is_processing" boolean DEFAULT false;

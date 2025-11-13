@@ -1,0 +1,34 @@
+{
+  "version": "5",
+  "dialect": "pg",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1763040171119,
+      "tag": "0000_reflective_omega_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1763040680608,
+      "tag": "0001_slim_miracleman",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1763041628218,
+      "tag": "0002_funny_penance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1763046146346,
+      "tag": "0003_slimy_human_robot",
+      "breakpoints": true
+    }
+  ]
+}

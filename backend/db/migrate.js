@@ -59,18 +59,56 @@ async function runMigration() {
       console.log('');
     }
     
-    // Run migrations
-    await migrate(db, { 
-      migrationsFolder: './drizzle',
-      migrationsTable: '__drizzle_migrations'
-    });
-    
-    if (pendingMigrations.length > 0) {
-      console.log('');
-      console.log('✅ Successfully applied migrations:');
-      pendingMigrations.forEach((migration, index) => {
-        console.log(`   ✓ ${migration}`);
+    // Run migrations with better error handling
+    try {
+      await migrate(db, { 
+        migrationsFolder: './drizzle',
+        migrationsTable: '__drizzle_migrations'
       });
+      
+      if (pendingMigrations.length > 0) {
+        console.log('');
+        console.log('✅ Migrations processing completed');
+        console.log('');
+        console.log('🔍 Verifying migrations were applied...');
+        
+        // Verify critical tables exist
+        const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings'];
+        const missingTables = [];
+        
+        for (const table of tablesToCheck) {
+          try {
+            await db.execute(`SELECT 1 FROM ${table} LIMIT 1`);
+            console.log(`   ✓ Table '${table}' exists`);
+          } catch (error) {
+            missingTables.push(table);
+            console.log(`   ✗ Table '${table}' is MISSING`);
+          }
+        }
+        
+        if (missingTables.length > 0) {
+          console.log('');
+          console.log('⚠️  WARNING: Some tables are missing after migration!');
+          console.log('   Missing tables:', missingTables.join(', '));
+          console.log('');
+          console.log('   This usually means:');
+          console.log('   1. Migration files are malformed');
+          console.log('   2. Database user lacks permissions');
+          console.log('   3. Migration tracking is out of sync');
+          console.log('');
+          console.log('   Attempting recovery by running SQL directly...');
+          
+          // Try to apply missing migrations directly
+          await applyMissingMigrations(pendingMigrations);
+        } else {
+          console.log('');
+          console.log('✅ All expected tables verified successfully');
+        }
+      }
+    } catch (migrationError) {
+      console.error('');
+      console.error('Migration execution error:', migrationError);
+      throw migrationError;
     }
     
     console.log('');
@@ -171,6 +209,64 @@ async function getAppliedMigrations() {
   } catch (error) {
     // Migrations table doesn't exist yet
     return [];
+  }
+}
+
+// Apply migrations directly from SQL files (recovery mechanism)
+async function applyMissingMigrations(migrationNames) {
+  const path = await import('path');
+  
+  for (const migrationName of migrationNames) {
+    try {
+      const migrationPath = `./drizzle/${migrationName}.sql`;
+      const sql = fs.readFileSync(migrationPath, 'utf8');
+      
+      console.log(`   📝 Applying ${migrationName} directly...`);
+      
+      // Split by statement and execute
+      const statements = sql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+      
+      for (const statement of statements) {
+        try {
+          await db.execute(statement);
+        } catch (err) {
+          // Log but continue - some statements might be idempotent
+          if (!err.message.includes('already exists')) {
+            console.log(`      ⚠️  Statement warning: ${err.message}`);
+          }
+        }
+      }
+      
+      console.log(`   ✓ ${migrationName} applied`);
+    } catch (error) {
+      console.error(`   ✗ Failed to apply ${migrationName}:`, error.message);
+    }
+  }
+  
+  console.log('');
+  console.log('🔍 Re-verifying tables after direct application...');
+  
+  const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings'];
+  let allTablesExist = true;
+  
+  for (const table of tablesToCheck) {
+    try {
+      await db.execute(`SELECT 1 FROM ${table} LIMIT 1`);
+      console.log(`   ✓ Table '${table}' now exists`);
+    } catch (error) {
+      console.log(`   ✗ Table '${table}' still missing`);
+      allTablesExist = false;
+    }
+  }
+  
+  if (!allTablesExist) {
+    console.log('');
+    console.log('❌ CRITICAL: Unable to create all required tables');
+    console.log('   Please check database permissions and migration files');
+    throw new Error('Migration recovery failed');
   }
 }
 

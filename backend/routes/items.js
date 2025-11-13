@@ -8,6 +8,7 @@ import { authenticateDevice } from '../middleware/deviceAuth.js';
 import { processItem, isOllamaEnabled } from '../services/llm.js';
 import { processBarcode, isBarcode } from '../services/barcode.js';
 import { logDeviceEvent } from '../services/deviceEvents.js';
+import logger from '../logger.js';
 
 const router = express.Router();
 
@@ -28,25 +29,27 @@ function broadcastToUser(userId, event) {
   });
 }
 
-// SSE endpoint for real-time updates
-// Supports both header auth (JWT in Authorization header) and query param auth (for EventSource)
-router.get('/events', async (req, res) => {
-  // EventSource doesn't support custom headers, so we accept token via query param
-  const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-  
-  if (!token) {
-    return res.status(401).json({ error: 'No authentication token provided' });
-  }
+  // SSE endpoint for real-time updates
+  // Supports both header auth (JWT in Authorization header) and query param auth (for EventSource)
+  router.get('/events', async (req, res) => {
+    // EventSource doesn't support custom headers, so we accept token via query param
+    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      logger.warn('SSE connection rejected - no token');
+      return res.status(401).json({ error: 'No authentication token provided' });
+    }
 
-  // Verify token
-  let user;
-  try {
-    const jwt = await import('jsonwebtoken');
-    const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-    user = decoded;
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid authentication token' });
-  }
+    // Verify token
+    let user;
+    try {
+      const jwt = await import('jsonwebtoken');
+      const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      user = decoded;
+    } catch (error) {
+      logger.warn('SSE connection rejected - invalid token');
+      return res.status(401).json({ error: 'Invalid authentication token' });
+    }
 
   // Set SSE headers
   res.writeHead(200, {
@@ -56,12 +59,15 @@ router.get('/events', async (req, res) => {
     'X-Accel-Buffering': 'no', // Disable nginx buffering
   });
 
-  // Add client to set
-  const clientId = Date.now();
-  const client = { id: clientId, userId: user.userId, res };
-  sseClients.add(client);
+    // Add client to set
+    const clientId = Date.now();
+    const client = { id: clientId, userId: user.userId, res };
+    sseClients.add(client);
 
-  console.log(`SSE client connected: ${clientId} for user ${user.userId}`);
+    logger.info('SSE client connected', {
+      clientId,
+      userId: user.userId
+    });
 
   // Send initial connection message
   res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
@@ -76,13 +82,13 @@ router.get('/events', async (req, res) => {
     }
   }, 30000);
 
-  // Clean up on disconnect
-  req.on('close', () => {
-    console.log(`SSE client disconnected: ${clientId}`);
-    clearInterval(heartbeat);
-    sseClients.delete(client);
+    // Clean up on disconnect
+    req.on('close', () => {
+      logger.info('SSE client disconnected', { clientId });
+      clearInterval(heartbeat);
+      sseClients.delete(client);
+    });
   });
-});
 
 // Helper function to find or create category
 async function findOrCreateCategory(categoryName) {
@@ -155,19 +161,24 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// Bulk add items (with async LLM processing for each item)
-router.post('/bulk-add', authenticateToken, async (req, res) => {
-  try {
-    const { items: itemTexts, relatedTo, categoryId } = req.body;
+  // Bulk add items (with async LLM processing for each item)
+  router.post('/bulk-add', authenticateToken, async (req, res) => {
+    try {
+      const { items: itemTexts, relatedTo, categoryId } = req.body;
 
-    // Validation
-    if (!Array.isArray(itemTexts) || itemTexts.length === 0) {
-      return res.status(400).json({ error: 'Items array is required and must not be empty' });
-    }
+      logger.info('Bulk add items request', {
+        userId: req.user.id,
+        itemCount: itemTexts?.length || 0
+      });
 
-    if (itemTexts.length > 50) {
-      return res.status(400).json({ error: 'Maximum 50 items allowed per batch' });
-    }
+      // Validation
+      if (!Array.isArray(itemTexts) || itemTexts.length === 0) {
+        return res.status(400).json({ error: 'Items array is required and must not be empty' });
+      }
+
+      if (itemTexts.length > 50) {
+        return res.status(400).json({ error: 'Maximum 50 items allowed per batch' });
+      }
 
     // Validate all items are non-empty strings
     const validItemTexts = itemTexts.filter(text => 
@@ -229,6 +240,12 @@ router.post('/bulk-add', authenticateToken, async (req, res) => {
       })
     );
 
+    logger.info('Bulk add completed', {
+      userId: req.user.id,
+      itemsAdded: createdItems.length,
+      processingEnabled: ollamaEnabled
+    });
+
     // Return immediately with processing state
     res.status(201).json({
       success: true,
@@ -243,22 +260,32 @@ router.post('/bulk-add', authenticateToken, async (req, res) => {
       }
     }
   } catch (error) {
-    console.error('Error bulk adding items:', error);
+    logger.error('Error bulk adding items', {
+      userId: req.user.id,
+      error: error.message
+    });
     res.status(500).json({ error: 'Failed to bulk add items' });
   }
 });
 
-// Add new item (with async LLM processing or barcode processing)
-router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { name, quantity, notes, relatedTo, category, skipLlm } = req.body;
+  // Add new item (with async LLM processing or barcode processing)
+  router.post('/', authenticateToken, async (req, res) => {
+    try {
+      const { name, quantity, notes, relatedTo, category, skipLlm } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: 'Item name is required' });
-    }
+      if (!name) {
+        return res.status(400).json({ error: 'Item name is required' });
+      }
 
-    // Check if this is a barcode
-    const isBarcodeInput = isBarcode(name);
+      // Check if this is a barcode
+      const isBarcodeInput = isBarcode(name);
+      
+      logger.info('Adding item', {
+        userId: req.user.id,
+        itemName: name,
+        isBarcode: isBarcodeInput,
+        category
+      });
 
     // Check if Ollama is enabled
     const ollamaEnabled = await isOllamaEnabled();
@@ -303,6 +330,13 @@ router.post('/', authenticateToken, async (req, res) => {
     .where(eq(items.id, newItem.id))
     .limit(1);
 
+    logger.info('Item added', {
+      userId: req.user.id,
+      itemId: newItem.id,
+      itemName: itemWithCategory.name,
+      willProcess: shouldProcess
+    });
+
     // Return immediately with processing state
     res.status(201).json(itemWithCategory);
 
@@ -323,7 +357,10 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     }
   } catch (error) {
-    console.error('Error adding item:', error);
+    logger.error('Error adding item', {
+      userId: req.user.id,
+      error: error.message
+    });
     res.status(500).json({ error: 'Failed to add item' });
   }
 });
@@ -484,9 +521,16 @@ async function processItemAsync(itemId, originalName, existingQuantity, existing
       })
       .where(eq(items.id, itemId));
 
-    console.log(`Item ${itemId} processed: ${originalName} -> ${processed.name}`);
+    logger.debug('Item async processing completed', {
+      itemId,
+      originalName,
+      processedName: processed.name
+    });
   } catch (error) {
-    console.error(`Error processing item ${itemId}:`, error);
+    logger.error('Error processing item async', {
+      itemId,
+      error: error.message
+    });
     // Mark as not processing even if failed
     await db.update(items)
       .set({
@@ -664,21 +708,27 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
   }
 });
 
-// Update item
-router.put('/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, quantity, notes, relatedTo, category } = req.body;
+  // Update item
+  router.put('/:id', authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, quantity, notes, relatedTo, category } = req.body;
 
-    // Get current item to check if it's a barcode item
-    const [currentItem] = await db.select()
-      .from(items)
-      .where(eq(items.id, parseInt(id)))
-      .limit(1);
+      logger.info('Updating item', {
+        userId: req.user.id,
+        itemId: id
+      });
 
-    if (!currentItem) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
+      // Get current item to check if it's a barcode item
+      const [currentItem] = await db.select()
+        .from(items)
+        .where(eq(items.id, parseInt(id)))
+        .limit(1);
+
+      if (!currentItem) {
+        logger.warn('Update failed - item not found', { itemId: id });
+        return res.status(404).json({ error: 'Item not found' });
+      }
 
     const updateData = {
       updatedAt: new Date(),
@@ -736,6 +786,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     .where(eq(items.id, parseInt(id)))
     .limit(1);
 
+    logger.info('Item updated', {
+      userId: req.user.id,
+      itemId: id,
+      itemName: itemWithCategory.name
+    });
+
     res.json(itemWithCategory);
 
     // Broadcast to all users
@@ -746,7 +802,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error updating item:', error);
+    logger.error('Error updating item', {
+      userId: req.user.id,
+      itemId: req.params.id,
+      error: error.message
+    });
     res.status(500).json({ error: 'Failed to update item' });
   }
 });
@@ -792,33 +852,49 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete item
-router.delete('/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
+  // Delete item
+  router.delete('/:id', authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
 
-    const [deletedItem] = await db.delete(items)
-      .where(eq(items.id, parseInt(id)))
-      .returning();
-
-    if (!deletedItem) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
-
-    res.json({ message: 'Item deleted successfully' });
-
-    // Broadcast to all users
-    if (req.user?.userId) {
-      broadcastToUser(req.user.userId, {
-        type: 'item_deleted',
-        itemId: parseInt(id),
+      logger.info('Deleting item', {
+        userId: req.user.id,
+        itemId: id
       });
+
+      const [deletedItem] = await db.delete(items)
+        .where(eq(items.id, parseInt(id)))
+        .returning();
+
+      if (!deletedItem) {
+        logger.warn('Delete failed - item not found', { itemId: id });
+        return res.status(404).json({ error: 'Item not found' });
+      }
+
+      logger.info('Item deleted', {
+        userId: req.user.id,
+        itemId: id,
+        itemName: deletedItem.name
+      });
+
+      res.json({ message: 'Item deleted successfully' });
+
+      // Broadcast to all users
+      if (req.user?.userId) {
+        broadcastToUser(req.user.userId, {
+          type: 'item_deleted',
+          itemId: parseInt(id),
+        });
+      }
+    } catch (error) {
+      logger.error('Error deleting item', {
+        userId: req.user.id,
+        itemId: req.params.id,
+        error: error.message
+      });
+      res.status(500).json({ error: 'Failed to delete item' });
     }
-  } catch (error) {
-    console.error('Error deleting item:', error);
-    res.status(500).json({ error: 'Failed to delete item' });
-  }
-});
+  });
 
 // Reorder items
 router.post('/reorder', authenticateToken, async (req, res) => {

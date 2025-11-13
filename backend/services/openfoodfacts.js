@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import logger from '../logger.js';
 
 /**
  * Fetches product information from OpenFoodFacts API
@@ -6,6 +7,10 @@ import fetch from 'node-fetch';
  * @returns {Promise<Object>} Product information or error
  */
 export async function fetchProduct(barcode) {
+  const startTime = Date.now();
+  
+  logger.debug('Fetching from OpenFoodFacts', { barcode });
+  
   try {
     const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`;
     
@@ -16,7 +21,12 @@ export async function fetchProduct(barcode) {
     });
 
     if (!response.ok) {
-      console.error(`OpenFoodFacts API error: ${response.status}`);
+      const duration = Date.now() - startTime;
+      logger.warn('OpenFoodFacts API error', {
+        barcode,
+        status: response.status,
+        duration: `${duration}ms`
+      });
       
       // 404 means product not found in database
       if (response.status === 404) {
@@ -37,6 +47,11 @@ export async function fetchProduct(barcode) {
 
     // Check if product was found
     if (data.status === 0 || !data.product) {
+      const duration = Date.now() - startTime;
+      logger.warn('OpenFoodFacts product not found', {
+        barcode,
+        duration: `${duration}ms`
+      });
       return {
         found: false,
         error: 'Product not found in OpenFoodFacts database',
@@ -46,7 +61,7 @@ export async function fetchProduct(barcode) {
     const product = data.product;
 
     // Extract relevant information
-    return {
+    const result = {
       found: true,
       productName: product.product_name || product.product_name_en || 'Unknown Product',
       brand: product.brands || '',
@@ -60,8 +75,23 @@ export async function fetchProduct(barcode) {
         product.quantity
       ].filter(Boolean).join(' '),
     };
+    
+    const duration = Date.now() - startTime;
+    logger.info('OpenFoodFacts product found', {
+      barcode,
+      productName: result.productName,
+      brand: result.brand,
+      duration: `${duration}ms`
+    });
+    
+    return result;
   } catch (error) {
-    console.error('Error fetching from OpenFoodFacts:', error);
+    const duration = Date.now() - startTime;
+    logger.error('OpenFoodFacts API error', {
+      barcode,
+      duration: `${duration}ms`,
+      error: error.message
+    });
     return {
       found: false,
       error: error.message || 'Failed to fetch product information',

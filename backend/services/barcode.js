@@ -3,6 +3,7 @@ import { barcodes, pendingBarcodes, categories, items } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { fetchProduct } from './openfoodfacts.js';
 import { processItem } from './llm.js';
+import logger from '../logger.js';
 
 /**
  * Process a barcode and create an item
@@ -14,6 +15,8 @@ import { processItem } from './llm.js';
  * @returns {Promise<Object>} The created item or error
  */
 export async function processBarcode(barcode, userId, quantity = null, notes = null, relatedTo = null) {
+  logger.info('Processing barcode', { barcode, userId, quantity, notes });
+  
   try {
     // Step 1: Check if barcode exists in cache
     const [cachedBarcode] = await db
@@ -26,7 +29,11 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
 
     if (cachedBarcode) {
       // Use cached data
-      console.log(`Using cached barcode data for ${barcode}`);
+      logger.info('Using cached barcode data', {
+        barcode,
+        genericName: cachedBarcode.genericName
+      });
+      
       genericName = cachedBarcode.genericName;
       categoryId = cachedBarcode.categoryId;
       fullProductName = cachedBarcode.fullProductName;
@@ -38,7 +45,7 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
         .where(eq(barcodes.barcode, barcode));
     } else {
       // Step 2: Add to pending_barcodes
-      console.log(`Processing new barcode: ${barcode}`);
+      logger.debug('Processing new barcode', { barcode });
       await db.insert(pendingBarcodes).values({
         barcode,
         rawData: null,
@@ -48,6 +55,11 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
       const productData = await fetchProduct(barcode);
 
       if (!productData.found) {
+        logger.warn('Barcode lookup failed', {
+          barcode,
+          error: productData.error
+        });
+        
         // Store failed lookup with error
         await db
           .update(pendingBarcodes)
@@ -87,6 +99,11 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
 
       // Step 5: Process through LLM
       const fullName = `${productData.brand} ${productData.productName}`.trim();
+      logger.debug('Processing barcode through LLM', {
+        barcode,
+        fullName
+      });
+      
       const llmResult = await processItem(fullName, quantity, notes);
 
       // Step 6: Find matching category
@@ -97,6 +114,12 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
       categoryId = matchedCategory?.id || null;
 
       // Step 7: Store in barcodes table
+      logger.debug('Caching barcode data', {
+        barcode,
+        genericName: llmResult.name,
+        categoryId
+      });
+      
       await db.insert(barcodes).values({
         barcode,
         fullProductName: productData.fullProductName,
@@ -128,19 +151,34 @@ export async function processBarcode(barcode, userId, quantity = null, notes = n
       })
       .returning();
 
+    logger.info('Barcode processed successfully', {
+      barcode,
+      itemId: newItem.id,
+      itemName: newItem.name,
+      categoryId: newItem.categoryId
+    });
+
     return {
       success: true,
       item: newItem,
       fullProductName,
     };
   } catch (error) {
-    console.error('Error processing barcode:', error);
+    logger.error('Error processing barcode', {
+      barcode,
+      userId,
+      error: error.message,
+      stack: error.stack
+    });
     
     // Try to clean up pending barcode
     try {
       await db.delete(pendingBarcodes).where(eq(pendingBarcodes.barcode, barcode));
     } catch (cleanupError) {
-      console.error('Error cleaning up pending barcode:', cleanupError);
+      logger.error('Error cleaning up pending barcode', {
+        barcode,
+        error: cleanupError.message
+      });
     }
 
     throw error;

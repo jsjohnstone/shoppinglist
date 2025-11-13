@@ -26,6 +26,7 @@ import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyN
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CategoryBadge } from './CategoryBadge';
+import { getIcon } from '../lib/icons';
 
 // Simple autocomplete for edit mode
 function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, placeholder, icon: Icon }) {
@@ -438,14 +439,18 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     sortedItems.forEach(item => {
       const category = item.categoryName || 'Uncategorized';
       if (!groups[category]) {
-        groups[category] = [];
+        groups[category] = {
+          items: [],
+          icon: item.categoryIcon,
+          color: item.categoryColor,
+        };
       }
-      groups[category].push(item);
+      groups[category].items.push(item);
     });
     
     // Sort items within each category
     Object.keys(groups).forEach(category => {
-      groups[category] = groups[category].sort((a, b) => {
+      groups[category].items = groups[category].items.sort((a, b) => {
         switch (sortBy) {
           case 'newest':
             return new Date(b.createdAt) - new Date(a.createdAt);
@@ -518,21 +523,25 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     );
   }
 
-  const renderItemList = (itemsToRender, title, categoryName = null) => {
+  const renderItemList = (itemsToRender, title, categoryName = null, categoryIcon = null, categoryColor = null) => {
     const isCollapsed = categoryName && collapsedCategories.has(categoryName);
+    const Icon = categoryIcon ? getIcon(categoryIcon) : null;
     
     return (
       <Card key={title}>
         <div 
-          className={`p-4 border-b dark:border-gray-700 flex items-center justify-between cursor-pointer ${
-            categoryName ? 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20' : 'bg-gray-50 dark:bg-gray-800'
-          }`}
+          className="p-4 border-b dark:border-gray-700 flex items-center justify-between cursor-pointer"
+          style={categoryColor ? {
+            backgroundColor: `${categoryColor}20`,
+            borderBottomColor: categoryColor,
+          } : {}}
           onClick={() => categoryName && toggleCategory(categoryName)}
         >
-          <h2 className="font-semibold flex items-center gap-2 dark:text-gray-100">
+          <h2 className="font-semibold flex items-center gap-2" style={categoryColor ? { color: categoryColor } : {}}>
             {categoryName && (
               isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
             )}
+            {Icon && <Icon className="h-5 w-5" />}
             {title}
           </h2>
         </div>
@@ -624,8 +633,8 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
         </>
       ) : (
         <>
-          {Object.entries(groupedByCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryItems]) =>
-            renderItemList(categoryItems, `${category} (${categoryItems.length})`, category)
+          {Object.entries(groupedByCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryData]) =>
+            renderItemList(categoryData.items, `${category} (${categoryData.items.length})`, category, categoryData.icon, categoryData.color)
           )}
         </>
       )}

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getSetting } from '../routes/settings.js';
+import logger from '../logger.js';
 
 class HomeAssistantService {
   constructor() {
@@ -49,16 +50,25 @@ class HomeAssistantService {
   }
 
   async testConnection() {
+    logger.debug('Testing Home Assistant connection');
+    
     try {
       const api = await this.getAxiosInstance();
       const response = await api.get('/api/');
+      
+      logger.info('Home Assistant connection successful', {
+        version: response.data.version
+      });
+      
       return {
         success: true,
         message: response.data.message || 'Connected to Home Assistant',
         version: response.data.version,
       };
     } catch (error) {
-      console.error('HA connection test failed:', error.message);
+      logger.error('Home Assistant connection failed', {
+        error: error.message
+      });
       return {
         success: false,
         error: error.response?.data?.message || error.message,
@@ -67,6 +77,8 @@ class HomeAssistantService {
   }
 
   async getMediaPlayerEntities() {
+    logger.debug('Fetching Home Assistant media player entities');
+    
     try {
       const api = await this.getAxiosInstance();
       const response = await api.get('/api/states');
@@ -80,14 +92,26 @@ class HomeAssistantService {
           state: entity.state,
         }));
 
+      logger.info('Home Assistant media players fetched', {
+        count: mediaPlayers.length
+      });
+
       return mediaPlayers;
     } catch (error) {
-      console.error('Failed to fetch media player entities:', error.message);
+      logger.error('Failed to fetch Home Assistant media players', {
+        error: error.message
+      });
       throw new Error('Failed to fetch Home Assistant entities');
     }
   }
 
   async playTTS(entityId, message, service = null) {
+    logger.debug('Home Assistant TTS request', {
+      entityId,
+      messageLength: message.length,
+      service
+    });
+    
     try {
       const config = await this.loadConfig();
       const ttsService = service || config.defaultTtsService;
@@ -106,14 +130,27 @@ class HomeAssistantService {
         message: message,
       });
 
+      logger.info('Home Assistant TTS sent', {
+        entityId,
+        service: ttsService
+      });
+
       return { success: true };
     } catch (error) {
-      console.error('TTS playback failed:', error.message);
+      logger.error('Home Assistant TTS failed', {
+        entityId,
+        error: error.message
+      });
       throw new Error('Failed to play TTS message');
     }
   }
 
   async playSound(entityId, soundUrl) {
+    logger.debug('Home Assistant sound playback request', {
+      entityId,
+      soundUrl
+    });
+    
     try {
       const api = await this.getAxiosInstance();
 
@@ -124,20 +161,37 @@ class HomeAssistantService {
         media_content_type: 'music',
       });
 
+      logger.info('Home Assistant sound played', {
+        entityId,
+        soundUrl
+      });
+
       return { success: true };
     } catch (error) {
-      console.error('Sound playback failed:', error.message);
+      logger.error('Home Assistant sound playback failed', {
+        entityId,
+        error: error.message
+      });
       throw new Error('Failed to play sound');
     }
   }
 
   async getStates() {
+    logger.debug('Fetching Home Assistant states');
+    
     try {
       const api = await this.getAxiosInstance();
       const response = await api.get('/api/states');
+      
+      logger.info('Home Assistant states fetched', {
+        count: response.data.length
+      });
+      
       return response.data;
     } catch (error) {
-      console.error('Failed to fetch states:', error.message);
+      logger.error('Failed to fetch Home Assistant states', {
+        error: error.message
+      });
       throw new Error('Failed to fetch Home Assistant states');
     }
   }

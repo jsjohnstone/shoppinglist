@@ -1,5 +1,6 @@
 import { Ollama } from 'ollama';
 import { getSetting } from '../routes/settings.js';
+import logger from '../logger.js';
 
 // Create Ollama instance dynamically based on settings
 async function getOllamaInstance() {
@@ -27,10 +28,15 @@ export async function isOllamaEnabled() {
  * Returns: { name, quantity, notes } or null if Ollama disabled
  */
 export async function normalizeItemName(itemName, existingQuantity = null) {
+  const startTime = Date.now();
+  
   const ollama = await getOllamaInstance();
   if (!ollama) {
+    logger.debug('LLM normalization skipped (disabled)', { itemName });
     return null; // Ollama disabled
   }
+
+  logger.debug('LLM normalization started', { itemName, existingQuantity });
 
   try {
     const model = await getModel();
@@ -127,11 +133,15 @@ NOTES: NONE
 ${existingQuantity ? `Note: Quantity already specified as "${existingQuantity}", so only extract if different or more specific.\n` : ''}
 Product: ${itemName}`;
 
+    logger.debug('Sending to LLM', { itemName, model });
+    
     const response = await ollama.generate({
       model,
       prompt: prompt,
       stream: false,
     });
+    
+    const duration = Date.now() - startTime;
 
     const lines = response.response.trim().split('\n');
     let name = itemName;
@@ -160,13 +170,26 @@ Product: ${itemName}`;
       }
     }
     
-    return {
+    const result = {
       name: name || itemName,
       quantity,
       notes
     };
+    
+    logger.info('LLM normalization completed', {
+      itemName,
+      duration: `${duration}ms`,
+      result
+    });
+    
+    return result;
   } catch (error) {
-    console.error('Error normalizing item name:', error);
+    const duration = Date.now() - startTime;
+    logger.error('LLM normalization failed', {
+      itemName,
+      duration: `${duration}ms`,
+      error: error.message
+    });
     return {
       name: itemName,
       quantity: null,
@@ -180,10 +203,15 @@ Product: ${itemName}`;
  * Returns category name that should match one of the existing categories, or null if Ollama disabled
  */
 export async function suggestCategory(itemName) {
+  const startTime = Date.now();
+  
   const ollama = await getOllamaInstance();
   if (!ollama) {
+    logger.debug('LLM category suggestion skipped (disabled)', { itemName });
     return null; // Ollama disabled
   }
+
+  logger.debug('LLM category suggestion started', { itemName });
 
   try {
     const model = await getModel();
@@ -207,13 +235,25 @@ Category:`;
       stream: false,
     });
 
+    const duration = Date.now() - startTime;
     const category = response.response.trim()
       .replace(/^["']|["']$/g, '') // Remove quotes
       .split('\n')[0]; // Take first line only
     
+    logger.info('LLM category suggestion completed', {
+      itemName,
+      duration: `${duration}ms`,
+      category
+    });
+    
     return category || null;
   } catch (error) {
-    console.error('Error suggesting category:', error);
+    const duration = Date.now() - startTime;
+    logger.error('LLM category suggestion failed', {
+      itemName,
+      duration: `${duration}ms`,
+      error: error.message
+    });
     return null;
   }
 }
@@ -238,7 +278,7 @@ export async function processItem(itemName, existingQuantity = null, existingNot
     return null;
   }
 
-  return {
+  const result = {
     name: normalized.name,
     quantity: normalized.quantity || existingQuantity,
     notes: existingNotes ? 
@@ -246,4 +286,11 @@ export async function processItem(itemName, existingQuantity = null, existingNot
       normalized.notes,
     suggestedCategory
   };
+  
+  logger.info('LLM item processing completed', {
+    itemName,
+    result
+  });
+  
+  return result;
 }

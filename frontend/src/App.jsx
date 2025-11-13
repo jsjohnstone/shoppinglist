@@ -69,33 +69,34 @@ function ShoppingListApp() {
     return () => clearInterval(interval);
   }, []);
 
-  // SSE connection for real-time updates
-  useEffect(() => {
-    if (!user) return;
-    
-    sseClient.current = new SSEClient(
-      // onMessage
-      (event) => {
-        // Invalidate queries to refetch data
-        if (event.type === 'item_added' || 
-            event.type === 'item_updated' || 
-            event.type === 'item_deleted' ||
-            event.type === 'item_toggled') {
-          queryClient.invalidateQueries(['items']);
-        }
-      },
-      // onError
-      (error) => {
-        console.error('SSE error:', error);
-      }
-    );
-    
-    sseClient.current.connect(api.token);
-    
-    return () => {
-      sseClient.current?.disconnect();
-    };
-  }, [user, queryClient]);
+  // SSE connection for real-time updates (DISABLED - EventSource doesn't support auth headers)
+  // TODO: Re-enable once we implement cookie-based auth or query param token
+  // useEffect(() => {
+  //   if (!user) return;
+  //   
+  //   sseClient.current = new SSEClient(
+  //     // onMessage
+  //     (event) => {
+  //       // Invalidate queries to refetch data
+  //       if (event.type === 'item_added' || 
+  //           event.type === 'item_updated' || 
+  //           event.type === 'item_deleted' ||
+  //           event.type === 'item_toggled') {
+  //         queryClient.invalidateQueries(['items']);
+  //       }
+  //     },
+  //     // onError
+  //     (error) => {
+  //       console.error('SSE error:', error);
+  //     }
+  //   );
+  //   
+  //   sseClient.current.connect(api.token);
+  //   
+  //   return () => {
+  //     sseClient.current?.disconnect();
+  //   };
+  // }, [user, queryClient]);
 
   // Check if user is already logged in
   useEffect(() => {
@@ -150,67 +151,33 @@ function ShoppingListApp() {
     enabled: !!user,
   });
 
-  // Add item mutation with offline support
+  // Add item mutation (back to original - queue manager causing issues)
   const addItemMutation = useMutation({
-    mutationFn: async (itemData) => {
-      const result = await queueManager.queueOperation({
-        type: 'add',
-        data: itemData
-      });
-      
-      if (!result.success && result.queued) {
-        // Return optimistic data for offline
-        return { ...itemData, id: `temp-${Date.now()}`, isQueued: true };
-      }
-      
-      return result.result;
-    },
+    mutationFn: (itemData) => api.addItem(itemData),
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Toggle complete mutation with offline support
+  // Toggle complete mutation (back to original)
   const toggleCompleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const result = await queueManager.queueOperation({
-        type: 'toggle',
-        id
-      });
-      
-      return result.success ? result.result : null;
-    },
+    mutationFn: (id) => api.toggleItemComplete(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Delete item mutation with offline support
+  // Delete item mutation (back to original)
   const deleteItemMutation = useMutation({
-    mutationFn: async (id) => {
-      const result = await queueManager.queueOperation({
-        type: 'delete',
-        id
-      });
-      
-      return result.success ? result.result : null;
-    },
+    mutationFn: (id) => api.deleteItem(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },
   });
 
-  // Update item mutation with offline support
+  // Update item mutation (back to original)
   const updateItemMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const result = await queueManager.queueOperation({
-        type: 'update',
-        id,
-        data
-      });
-      
-      return result.success ? result.result : null;
-    },
+    mutationFn: ({ id, data }) => api.updateItem(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['items']);
     },

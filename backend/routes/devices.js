@@ -308,4 +308,47 @@ router.post('/:id/events', async (req, res) => {
   }
 });
 
+// Create device event by device_id (for scanner apps)
+router.post('/events', authenticateDeviceOptional, async (req, res) => {
+  try {
+    const { type, message, metadata, device_id } = req.body;
+
+    if (!type || !message) {
+      return res.status(400).json({ error: 'type and message are required' });
+    }
+
+    // If authenticated via device auth, use that device
+    let deviceDbId;
+    if (req.device) {
+      deviceDbId = req.device.id;
+    } else if (device_id) {
+      // Look up device by device_id
+      const [device] = await db
+        .select()
+        .from(devices)
+        .where(eq(devices.deviceId, device_id))
+        .limit(1);
+      
+      if (!device) {
+        return res.status(404).json({ error: 'Device not found' });
+      }
+      deviceDbId = device.id;
+    } else {
+      return res.status(400).json({ error: 'device_id is required when not authenticated' });
+    }
+
+    const event = await logDeviceEvent(
+      deviceDbId,
+      type,
+      message,
+      metadata || null
+    );
+
+    res.status(201).json(event);
+  } catch (error) {
+    console.error('Error creating device event:', error);
+    res.status(500).json({ error: 'Failed to create event' });
+  }
+});
+
 export default router;

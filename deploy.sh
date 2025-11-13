@@ -20,11 +20,11 @@ fi
 source .env
 
 echo "📦 Pulling latest Docker images..."
-docker-compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml pull
 
 echo ""
 echo "🔄 Restarting services..."
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 echo ""
 echo "⏳ Waiting for services to be healthy..."
@@ -32,7 +32,7 @@ sleep 10
 
 echo ""
 echo "📊 Service Status:"
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 
 echo ""
 echo "✅ Deployment complete!"
@@ -40,4 +40,4 @@ echo ""
 echo "🌐 Access the application at: http://$(hostname -I | awk '{print $1}'):${APP_PORT:-3000}"
 echo ""
 echo "📝 View logs with:"
-echo "   docker-compose -f docker-compose.prod.yml logs -f"
+echo "   docker compose -f docker-compose.prod.yml logs -f"

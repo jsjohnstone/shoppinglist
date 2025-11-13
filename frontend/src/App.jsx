@@ -139,7 +139,7 @@ function ShoppingListApp() {
           {/* Left side */}
           <div className="flex items-center gap-2">
             {/* Logo icon - always visible */}
-            <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <ShoppingCart className="h-6 w-6 text-gray-900 dark:text-white" />
             
             {/* Title - visible on all screen sizes */}
             <h1 className="text-xl md:text-2xl font-bold dark:text-white">Shopping List</h1>

@@ -289,7 +289,7 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center gap-3 p-3 border-b last:border-b-0 ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing' : 'cursor-pointer'} touch-none`}
+      className={`flex items-center gap-3 p-3 border-b last:border-b-0 ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
     >
       <Checkbox
         checked={item.isCompleted}
@@ -317,11 +317,6 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
               Processing...
             </span>
           )}
-          {item.wasScanned && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
-              <Barcode className="h-3 w-3" />
-            </span>
-          )}
           {item.categoryName && (
             <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded flex items-center gap-1">
               <FolderOpen className="h-3 w-3" />
@@ -332,6 +327,11 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
             <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 rounded flex items-center gap-1">
               <Tag className="h-3 w-3" />
               {item.relatedTo}
+            </span>
+          )}
+          {item.wasScanned && (
+            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
+              <Barcode className="h-3 w-3" />
             </span>
           )}
         </div>
@@ -375,8 +375,8 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 250,
-        tolerance: 5,
+        delay: 100,
+        tolerance: 15,
       },
     }),
     useSensor(KeyboardSensor, {

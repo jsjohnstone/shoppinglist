@@ -7,6 +7,7 @@ import { authenticateApiKey } from '../middleware/apiKey.js';
 import { authenticateDevice } from '../middleware/deviceAuth.js';
 import { processItem, isOllamaEnabled } from '../services/llm.js';
 import { processBarcode, isBarcode } from '../services/barcode.js';
+import { logDeviceEvent } from '../services/deviceEvents.js';
 
 const router = express.Router();
 
@@ -461,6 +462,33 @@ router.post('/barcode', authenticateDevice, async (req, res) => {
         item: itemWithCategory,
         error: result.error,
       });
+    }
+
+    // Log device event
+    if (req.device?.id) {
+      if (result.success) {
+        await logDeviceEvent(
+          req.device.id,
+          'scan_success',
+          `Scanned: ${itemWithCategory.name}`,
+          {
+            barcode,
+            itemName: itemWithCategory.name,
+            categoryName: itemWithCategory.categoryName,
+            itemId: itemWithCategory.id,
+          }
+        );
+      } else {
+        await logDeviceEvent(
+          req.device.id,
+          'scan_error',
+          result.error || 'Barcode not found',
+          {
+            barcode,
+            error: result.error,
+          }
+        );
+      }
     }
 
     // Return appropriate response

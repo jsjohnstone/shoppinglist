@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, integer, boolean, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, integer, boolean, timestamp, uuid, json } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -69,6 +69,16 @@ export const devices = pgTable('devices', {
   lastSeen: timestamp('last_seen'),
   status: varchar('status', { length: 50 }).default('pending'),
   createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Device Events
+export const deviceEvents = pgTable('device_events', {
+  id: serial('id').primaryKey(),
+  deviceId: integer('device_id').references(() => devices.id, { onDelete: 'cascade' }).notNull(),
+  eventType: varchar('event_type', { length: 50 }).notNull(),
+  message: text('message').notNull(),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 // Phase 3: Home Assistant Configuration

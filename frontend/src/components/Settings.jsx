@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Plus, Copy, Check, CheckCircle2, XCircle, Clock, Wifi, Volume2 } from 'lucide-react';
+import { Trash2, Plus, Copy, Check, CheckCircle2, XCircle, Clock, Wifi, Volume2, Edit } from 'lucide-react';
 import { api } from '@/lib/api';
+import { DeviceEditDialog } from './DeviceEditDialog';
+import { DeviceEvents } from './DeviceEvents';
 
 export function Settings({ onClose }) {
   const [activeTab, setActiveTab] = useState('api-keys');
@@ -16,6 +18,7 @@ export function Settings({ onClose }) {
   const [haConfig, setHaConfig] = useState({ ha_url: '', ha_token: '', default_tts_service: 'tts.google_translate_say' });
   const [ollamaConfig, setOllamaConfig] = useState({ enabled: false, url: '', model: '' });
   const [selectedDevice, setSelectedDevice] = useState(null);
+  const [editingDevice, setEditingDevice] = useState(null);
   const queryClient = useQueryClient();
 
   // API Keys queries
@@ -94,6 +97,15 @@ export function Settings({ onClose }) {
     mutationFn: (id) => api.deleteDevice(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['devices']);
+    },
+  });
+
+  const updateDeviceMutation = useMutation({
+    mutationFn: ({ id, data }) => api.updateDevice(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['devices']);
+      queryClient.invalidateQueries(['device-events']);
+      setEditingDevice(null);
     },
   });
 
@@ -314,36 +326,66 @@ export function Settings({ onClose }) {
                 <div className="space-y-2">
                   {devices.map((device) => (
                     <Card key={device.id} className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium dark:text-gray-100">{device.friendly_name || device.device_id}</span>
-                            {getDeviceStatusBadge(device)}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">ID: {device.device_id}</div>
-                          {device.ha_speaker_entity && (
-                            <div className="text-sm text-gray-600 dark:text-gray-400">Speaker: {device.ha_speaker_entity}</div>
-                          )}
-                          {device.last_seen && (
-                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                              Last seen: {new Date(device.last_seen).toLocaleString()}
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium dark:text-gray-100">{device.friendly_name || device.device_id}</span>
+                              {getDeviceStatusBadge(device)}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          {!device.is_approved && (
-                            <Button size="sm" onClick={() => setSelectedDevice(device)}>
-                              Approve
+                            <div className="text-sm text-gray-600 dark:text-gray-400">ID: {device.device_id}</div>
+                            {device.ha_speaker_entity && (
+                              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                                <Volume2 className="h-3 w-3" />
+                                {device.ha_speaker_entity}
+                              </div>
+                            )}
+                            {device.usb_device_path && (
+                              <div className="text-sm text-gray-600 dark:text-gray-400">USB: {device.usb_device_path}</div>
+                            )}
+                            {device.last_seen && (
+                              <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                Last seen: {new Date(device.last_seen).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            {!device.is_approved && (
+                              <Button size="sm" onClick={() => setSelectedDevice(device)}>
+                                Approve
+                              </Button>
+                            )}
+                            {device.is_approved && (
+                              <Button variant="ghost" size="icon" onClick={() => setEditingDevice(device)} title="Edit device">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => deleteDeviceMutation.mutate(device.id)} title="Delete device">
+                              <Trash2 className="h-4 w-4 text-red-600" />
                             </Button>
-                          )}
-                          <Button variant="ghost" size="icon" onClick={() => deleteDeviceMutation.mutate(device.id)}>
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
+                          </div>
                         </div>
+
+                        {/* Device Events */}
+                        {device.is_approved && (
+                          <div className="pt-2 border-t dark:border-gray-700">
+                            <DeviceEvents deviceId={device.id} limit={5} />
+                          </div>
+                        )}
                       </div>
                     </Card>
                   ))}
                 </div>
+              )}
+
+              {/* Device Edit Modal */}
+              {editingDevice && (
+                <DeviceEditDialog
+                  device={editingDevice}
+                  haEntities={haEntities}
+                  onSave={(data) => updateDeviceMutation.mutate({ id: editingDevice.id, data })}
+                  onCancel={() => setEditingDevice(null)}
+                />
               )}
 
               {/* Device Approval Modal */}

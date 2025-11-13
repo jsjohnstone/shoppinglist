@@ -194,6 +194,10 @@ class ApiClient {
     });
   }
 
+  async getDeviceEvents(id, limit = 50) {
+    return this.request(`/devices/${id}/events?limit=${limit}`);
+  }
+
   // Home Assistant
   async getHAConfig() {
     return this.request('/settings/homeassistant');

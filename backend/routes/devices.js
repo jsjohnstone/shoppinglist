@@ -5,6 +5,7 @@ import { devices } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
 import { authenticateDevice, authenticateDeviceOptional } from '../middleware/deviceAuth.js';
+import { logDeviceEvent, getDeviceEvents } from '../services/deviceEvents.js';
 
 const router = express.Router();
 
@@ -162,6 +163,14 @@ router.patch('/:id/approve', authenticateToken, async (req, res) => {
 
     console.log(`Device approved: ${updatedDevice.deviceId} (${friendly_name})`);
 
+    // Log approval event
+    await logDeviceEvent(
+      updatedDevice.id,
+      'status_change',
+      `Device approved as "${friendly_name}"`,
+      { action: 'approved', friendly_name, ha_speaker_entity, usb_device_path }
+    );
+
     res.json({
       id: updatedDevice.id,
       device_id: updatedDevice.deviceId,
@@ -221,6 +230,19 @@ router.patch('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Device not found' });
     }
 
+    // Log settings update event
+    const changes = [];
+    if (friendly_name !== undefined) changes.push('friendly name');
+    if (ha_speaker_entity !== undefined) changes.push('speaker entity');
+    if (usb_device_path !== undefined) changes.push('USB device path');
+    
+    await logDeviceEvent(
+      updatedDevice.id,
+      'status_change',
+      `Device settings updated: ${changes.join(', ')}`,
+      updateData
+    );
+
     res.json({
       id: updatedDevice.id,
       device_id: updatedDevice.deviceId,
@@ -233,6 +255,56 @@ router.patch('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error updating device:', error);
     res.status(500).json({ error: 'Failed to update device' });
+  }
+});
+
+// Get device events (admin only)
+router.get('/:id/events', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+
+    const events = await getDeviceEvents(parseInt(id), limit);
+
+    res.json(events);
+  } catch (error) {
+    console.error('Error fetching device events:', error);
+    res.status(500).json({ error: 'Failed to fetch device events' });
+  }
+});
+
+// Create device event (device auth or admin auth)
+router.post('/:id/events', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, message, metadata } = req.body;
+
+    if (!type || !message) {
+      return res.status(400).json({ error: 'type and message are required' });
+    }
+
+    // Verify device exists
+    const [device] = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.id, parseInt(id)))
+      .limit(1);
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
+    }
+
+    const event = await logDeviceEvent(
+      parseInt(id),
+      type,
+      message,
+      metadata || null
+    );
+
+    res.status(201).json(event);
+  } catch (error) {
+    console.error('Error creating device event:', error);
+    res.status(500).json({ error: 'Failed to create event' });
   }
 });
 

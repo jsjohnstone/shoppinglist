@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { db } from '../db/index.js';
-import { haConfig } from '../db/schema.js';
+import { getSetting } from '../routes/settings.js';
 
 class HomeAssistantService {
   constructor() {
@@ -16,15 +15,21 @@ class HomeAssistantService {
       return this.config;
     }
 
-    const [config] = await db.select().from(haConfig).limit(1);
+    const haUrl = await getSetting('ha_url');
+    const haToken = await getSetting('ha_token');
+    const defaultTtsService = await getSetting('ha_tts_service', 'tts.google_translate_say');
     
-    if (!config) {
+    if (!haUrl || !haToken) {
       throw new Error('Home Assistant not configured');
     }
 
-    this.config = config;
+    this.config = {
+      haUrl,
+      haToken,
+      defaultTtsService,
+    };
     this.lastConfigLoad = Date.now();
-    return config;
+    return this.config;
   }
 
   async getAxiosInstance() {

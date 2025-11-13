@@ -5,7 +5,7 @@ import { eq, and, or, desc } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
 import { authenticateApiKey } from '../middleware/apiKey.js';
 import { authenticateDevice } from '../middleware/deviceAuth.js';
-import { processItem } from '../services/llm.js';
+import { processItem, isOllamaEnabled } from '../services/llm.js';
 import { processBarcode, isBarcode } from '../services/barcode.js';
 
 const router = express.Router();
@@ -91,6 +91,10 @@ router.post('/', authenticateToken, async (req, res) => {
     // Check if this is a barcode
     const isBarcodeInput = isBarcode(name);
 
+    // Check if Ollama is enabled
+    const ollamaEnabled = await isOllamaEnabled();
+    const shouldProcess = ollamaEnabled && (isBarcodeInput || !skipLlm);
+
     // First, add the item immediately with processing flag
     const [newItem] = await db.insert(items)
       .values({
@@ -99,7 +103,7 @@ router.post('/', authenticateToken, async (req, res) => {
         notes: notes || null,
         relatedTo: relatedTo || null,
         categoryId: category ? await findOrCreateCategory(category) : null,
-        isProcessing: isBarcodeInput || !skipLlm ? true : false,
+        isProcessing: shouldProcess,
         barcode: isBarcodeInput ? name.trim() : null,
         wasScanned: isBarcodeInput,
         addedBy: req.user.id,
@@ -131,11 +135,13 @@ router.post('/', authenticateToken, async (req, res) => {
     // Return immediately with processing state
     res.status(201).json(itemWithCategory);
 
-    // Process asynchronously
-    if (isBarcodeInput) {
-      processBarcodeAsync(newItem.id, name.trim(), quantity, notes, relatedTo, category);
-    } else if (!skipLlm) {
-      processItemAsync(newItem.id, name, quantity, notes, category);
+    // Process asynchronously only if Ollama is enabled
+    if (shouldProcess) {
+      if (isBarcodeInput) {
+        processBarcodeAsync(newItem.id, name.trim(), quantity, notes, relatedTo, category);
+      } else if (!skipLlm) {
+        processItemAsync(newItem.id, name, quantity, notes, category);
+      }
     }
   } catch (error) {
     console.error('Error adding item:', error);
@@ -213,27 +219,32 @@ async function processBarcodeAsync(itemId, barcode, existingQuantity, existingNo
         .set({ rawData: JSON.stringify(productData) })
         .where(eq(pendingBarcodesTable.barcode, barcode));
 
-      // Process through LLM
+      // Process through LLM if enabled
       const fullName = `${productData.brand} ${productData.productName}`.trim();
       const llmResult = await processItem(fullName, existingQuantity, existingNotes);
 
-      // Find category
-      const allCategories = await db.select().from(categories);
-      const matchedCategory = allCategories.find(
-        cat => cat.name.toLowerCase() === llmResult.suggestedCategory.toLowerCase()
-      );
-      categoryId = matchedCategory?.id || null;
+      if (llmResult) {
+        // Ollama enabled - use LLM result
+        const allCategories = await db.select().from(categories);
+        const matchedCategory = allCategories.find(
+          cat => cat.name.toLowerCase() === (llmResult.suggestedCategory || '').toLowerCase()
+        );
+        categoryId = matchedCategory?.id || null;
+        genericName = llmResult.name;
+      } else {
+        // Ollama disabled - use OpenFoodFacts name directly
+        genericName = productData.productName;
+        categoryId = null;
+      }
 
       // Store in barcodes table
       await db.insert(barcodesTable).values({
         barcode,
         fullProductName: productData.fullProductName,
-        genericName: llmResult.name,
+        genericName,
         categoryId,
         source: 'openfoodfacts',
       });
-
-      genericName = llmResult.name;
 
       // Clean up pending
       await db.delete(pendingBarcodesTable).where(eq(pendingBarcodesTable.barcode, barcode));
@@ -267,6 +278,17 @@ async function processItemAsync(itemId, originalName, existingQuantity, existing
   try {
     const processed = await processItem(originalName, existingQuantity, existingNotes);
     
+    if (!processed) {
+      // Ollama disabled - just mark as not processing
+      await db.update(items)
+        .set({
+          isProcessing: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(items.id, itemId));
+      return;
+    }
+
     // Use provided category if given, otherwise use LLM suggestion
     const categoryToUse = providedCategory || processed.suggestedCategory;
     const categoryId = await findOrCreateCategory(categoryToUse);

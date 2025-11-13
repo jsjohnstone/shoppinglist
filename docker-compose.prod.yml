@@ -23,36 +23,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: shoppinglist-ollama
-    volumes:
-      - ollama-data:/root/.ollama
-    ports:
-      - "11434:11434"
-    restart: unless-stopped
-    networks:
-      - shoppinglist-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    # Pull the model on first start
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        /bin/ollama serve &
-        sleep 5
-        ollama pull ${OLLAMA_MODEL:-llama3.2}
-        wait
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
   shoppinglist:
     image: ghcr.io/jsjohnstone/shoppinglist:latest
     container_name: shoppinglist-app
@@ -61,13 +31,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shoppinglist}
       - JWT_SECRET=${JWT_SECRET}
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - PORT=3000
       - NODE_ENV=production
     restart: unless-stopped
@@ -87,8 +53,6 @@ services:
 
 volumes:
   postgres-data:
-    driver: local
-  ollama-data:
     driver: local
 
 networks:

@@ -1,16 +1,39 @@
 import { Ollama } from 'ollama';
+import { getSetting } from '../routes/settings.js';
 
-const ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://localhost:11434' });
+// Create Ollama instance dynamically based on settings
+async function getOllamaInstance() {
+  const enabled = await getSetting('ollama_enabled', 'false');
+  if (enabled !== 'true') {
+    return null;
+  }
 
-// Default model - can be changed via env variable
-const MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+  const url = await getSetting('ollama_url', 'http://192.168.5.109:11434');
+  return new Ollama({ host: url });
+}
+
+async function getModel() {
+  return await getSetting('ollama_model', 'llama3.2');
+}
+
+// Check if Ollama is enabled
+export async function isOllamaEnabled() {
+  const enabled = await getSetting('ollama_enabled', 'false');
+  return enabled === 'true';
+}
 
 /**
  * Process an item name and extract useful information
- * Returns: { name, quantity, notes }
+ * Returns: { name, quantity, notes } or null if Ollama disabled
  */
 export async function normalizeItemName(itemName, existingQuantity = null) {
+  const ollama = await getOllamaInstance();
+  if (!ollama) {
+    return null; // Ollama disabled
+  }
+
   try {
+    const model = await getModel();
     const prompt = `You are a shopping list assistant. Process this product and extract:
 1. Generic item name (remove brands, but keep important descriptors)
 2. Quantity (if mentioned and not already specified separately)
@@ -52,7 +75,7 @@ ${existingQuantity ? `Note: Quantity already specified as "${existingQuantity}",
 Product: ${itemName}`;
 
     const response = await ollama.generate({
-      model: MODEL,
+      model,
       prompt: prompt,
       stream: false,
     });
@@ -101,10 +124,16 @@ Product: ${itemName}`;
 
 /**
  * Suggest a category for an item
- * Returns category name that should match one of the existing categories
+ * Returns category name that should match one of the existing categories, or null if Ollama disabled
  */
 export async function suggestCategory(itemName) {
+  const ollama = await getOllamaInstance();
+  if (!ollama) {
+    return null; // Ollama disabled
+  }
+
   try {
+    const model = await getModel();
     const prompt = `You are a grocery categorization assistant. Given an item name, return ONLY ONE category name from this list:
 - Vegetables
 - Fruit
@@ -120,7 +149,7 @@ Item: ${itemName}
 Category:`;
 
     const response = await ollama.generate({
-      model: MODEL,
+      model,
       prompt: prompt,
       stream: false,
     });
@@ -129,21 +158,32 @@ Category:`;
       .replace(/^["']|["']$/g, '') // Remove quotes
       .split('\n')[0]; // Take first line only
     
-    return category || 'Pantry Aisles'; // Default fallback
+    return category || null;
   } catch (error) {
     console.error('Error suggesting category:', error);
-    return 'Pantry Aisles'; // Default fallback
+    return null;
   }
 }
 
 /**
  * Process an item: normalize name, extract info, and suggest category
+ * Returns null if Ollama is disabled
  */
 export async function processItem(itemName, existingQuantity = null, existingNotes = null) {
+  const enabled = await isOllamaEnabled();
+  if (!enabled) {
+    return null;
+  }
+
   const [normalized, suggestedCategory] = await Promise.all([
     normalizeItemName(itemName, existingQuantity),
     suggestCategory(itemName)
   ]);
+
+  // If normalization failed, return null
+  if (!normalized) {
+    return null;
+  }
 
   return {
     name: normalized.name,

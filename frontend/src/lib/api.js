@@ -228,6 +228,24 @@ class ApiClient {
       method: 'POST',
     });
   }
+
+  // Ollama LLM
+  async getOllamaConfig() {
+    return this.request('/settings/ollama');
+  }
+
+  async updateOllamaConfig(configData) {
+    return this.request('/settings/ollama', {
+      method: 'PUT',
+      body: JSON.stringify(configData),
+    });
+  }
+
+  async testOllama() {
+    return this.request('/settings/ollama/test', {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiClient();

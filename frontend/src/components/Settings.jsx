@@ -14,6 +14,7 @@ export function Settings({ onClose }) {
   const [newKeyName, setNewKeyName] = useState('');
   const [copiedKey, setCopiedKey] = useState(null);
   const [haConfig, setHaConfig] = useState({ ha_url: '', ha_token: '', default_tts_service: 'tts.google_translate_say' });
+  const [ollamaConfig, setOllamaConfig] = useState({ enabled: false, url: '', model: '' });
   const [selectedDevice, setSelectedDevice] = useState(null);
   const queryClient = useQueryClient();
 
@@ -45,6 +46,12 @@ export function Settings({ onClose }) {
   const { data: ttsPhrases = [], isLoading: isLoadingPhrases } = useQuery({
     queryKey: ['tts-phrases'],
     queryFn: () => api.getTTSPhrases(),
+  });
+
+  // Ollama config queries
+  const { data: ollamaConfigData, isLoading: isLoadingOllama } = useQuery({
+    queryKey: ['ollama-config'],
+    queryFn: () => api.getOllamaConfig(),
   });
 
   // Mutations
@@ -104,6 +111,17 @@ export function Settings({ onClose }) {
     },
   });
 
+  const updateOllamaConfigMutation = useMutation({
+    mutationFn: (config) => api.updateOllamaConfig(config),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['ollama-config']);
+    },
+  });
+
+  const testOllamaMutation = useMutation({
+    mutationFn: () => api.testOllama(),
+  });
+
   const playTTSPreview = (template) => {
     // Replace template variables with example values
     const exampleMessage = template
@@ -161,6 +179,15 @@ export function Settings({ onClose }) {
     });
   }
 
+  // Initialize Ollama config from fetched data
+  if (ollamaConfigData && !ollamaConfig.url && ollamaConfigData.url) {
+    setOllamaConfig({
+      enabled: ollamaConfigData.enabled,
+      url: ollamaConfigData.url,
+      model: ollamaConfigData.model
+    });
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-white flex flex-col">
@@ -195,6 +222,14 @@ export function Settings({ onClose }) {
               onClick={() => setActiveTab('home-assistant')}
             >
               Home Assistant
+            </button>
+            <button
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                activeTab === 'llm' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600 hover:text-gray-900'
+              }`}
+              onClick={() => setActiveTab('llm')}
+            >
+              LLM
             </button>
             <button
               className={`px-4 py-2 font-medium border-b-2 transition-colors ${
@@ -444,6 +479,116 @@ export function Settings({ onClose }) {
                     </span>
                   </div>
                   <p className="text-sm mt-1">{testHAConnectionMutation.data.message || testHAConnectionMutation.data.error}</p>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* LLM Configuration Tab */}
+          {activeTab === 'llm' && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Configure external Ollama for AI-powered item categorization and normalization.
+              </p>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                await updateOllamaConfigMutation.mutateAsync(ollamaConfig);
+              }} className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="ollama_enabled"
+                    checked={ollamaConfig.enabled}
+                    onChange={(e) => setOllamaConfig({ ...ollamaConfig, enabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="ollama_enabled" className="cursor-pointer">
+                    Enable LLM Processing
+                  </Label>
+                </div>
+                {!ollamaConfig.enabled && (
+                  <p className="text-xs text-gray-500 bg-yellow-50 border border-yellow-200 rounded p-2">
+                    When disabled, items will be added exactly as entered without AI categorization.
+                  </p>
+                )}
+
+                <div>
+                  <Label htmlFor="ollama_url">Ollama URL</Label>
+                  <Input
+                    id="ollama_url"
+                    value={ollamaConfig.url}
+                    onChange={(e) => setOllamaConfig({ ...ollamaConfig, url: e.target.value })}
+                    placeholder="http://192.168.5.109:11434"
+                    disabled={!ollamaConfig.enabled}
+                    required={ollamaConfig.enabled}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">URL of your external Ollama instance</p>
+                </div>
+
+                <div>
+                  <Label htmlFor="ollama_model">Model Name</Label>
+                  <Input
+                    id="ollama_model"
+                    value={ollamaConfig.model}
+                    onChange={(e) => setOllamaConfig({ ...ollamaConfig, model: e.target.value })}
+                    placeholder="llama3.2"
+                    disabled={!ollamaConfig.enabled}
+                    required={ollamaConfig.enabled}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recommended: llama3.2, phi3:mini, or qwen2.5:0.5b
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={updateOllamaConfigMutation.isPending}>
+                    Save Configuration
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => testOllamaMutation.mutate()}
+                    disabled={testOllamaMutation.isPending || !ollamaConfig.enabled}
+                  >
+                    {testOllamaMutation.isPending ? 'Testing...' : 'Test Connection'}
+                  </Button>
+                </div>
+              </form>
+
+              {testOllamaMutation.data && (
+                <Card className={`p-4 ${testOllamaMutation.data.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  <div className="flex items-center gap-2">
+                    {testOllamaMutation.data.success ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-600" />
+                    )}
+                    <span className="font-medium">
+                      {testOllamaMutation.data.success ? 'Connection successful!' : 'Connection failed'}
+                    </span>
+                  </div>
+                  {testOllamaMutation.data.message && (
+                    <p className="text-sm mt-1">{testOllamaMutation.data.message}</p>
+                  )}
+                  {testOllamaMutation.data.test_response && (
+                    <p className="text-xs text-gray-600 mt-1">Test response: {testOllamaMutation.data.test_response}</p>
+                  )}
+                  {testOllamaMutation.data.error && (
+                    <p className="text-sm mt-1">{testOllamaMutation.data.error}</p>
+                  )}
+                  {testOllamaMutation.data.details && (
+                    <p className="text-xs text-gray-500 mt-1">{testOllamaMutation.data.details}</p>
+                  )}
+                </Card>
+              )}
+
+              {updateOllamaConfigMutation.isSuccess && (
+                <Card className="p-4 bg-green-50 border-green-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <span className="font-medium">Configuration saved successfully!</span>
+                  </div>
                 </Card>
               )}
             </div>

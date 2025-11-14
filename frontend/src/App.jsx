@@ -430,8 +430,8 @@ function ShoppingListApp() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <OfflineBanner isOnline={isOnline} queueCount={queueCount} />
       
-      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-        <div className="max-w-4xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
+      <header>
+        <div className="max-w-4xl mx-auto px-6 pt-6 pb-5 flex items-center justify-between">
           {/* Left side */}
           <div className="flex items-center gap-2">
             {/* Logo icon - always visible */}
@@ -468,7 +468,7 @@ function ShoppingListApp() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-4">
+      <main className="max-w-4xl mx-auto px-4 py-0">
         <div className="mb-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 shadow-sm">
           <ItemForm
             onAdd={addItemMutation.mutateAsync}
@@ -492,6 +492,12 @@ function ShoppingListApp() {
 
       {/* Settings Modal */}
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+
+      <footer>
+        <div className="max-w-4xl mx-auto px-6 pt-6 pb-5 flex items-center justify-center">
+          <div className="flex items-center text-center text-gray-600">Built with snacks by Blake ❤️</div>
+        </div>
+      </footer>
     </div>
   );
 }

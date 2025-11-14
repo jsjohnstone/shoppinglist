@@ -25,28 +25,28 @@ export class SSEClient {
       this.eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('SSE message received:', data.type);
+          console.log('🔔 SSE Event:', data.type, data);
           this.onMessage(data);
         } catch (error) {
-          console.error('SSE parse error:', error);
+          console.error('❌ SSE Parse Error:', error);
         }
       };
       
       this.eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
+        console.error('❌ SSE Connection Error:', error);
         this.onError(error);
         
         // Close and reconnect with exponential backoff
         this.eventSource.close();
         setTimeout(() => {
           this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
-          console.log(`Reconnecting SSE in ${this.reconnectDelay}ms...`);
+          console.log(`🔄 Reconnecting SSE in ${this.reconnectDelay}ms...`);
           this.connect(this.token);
         }, this.reconnectDelay);
       };
       
       this.eventSource.onopen = () => {
-        console.log('SSE connection established');
+        console.log('✅ SSE Connection Established - Real-time sync active');
         this.reconnectDelay = 1000; // Reset delay on successful connection
       };
       

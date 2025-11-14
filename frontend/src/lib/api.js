@@ -29,20 +29,56 @@ class ApiClient {
   }
 
   async request(endpoint, options = {}) {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        ...this.getHeaders(),
-        ...options.headers,
-      },
-    });
+    console.log('🌐 API Request starting:', options.method || 'GET', endpoint);
+    
+    // Add timeout to prevent hanging when offline
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('⏱️ Request timeout triggered after 5s');
+      controller.abort();
+    }, 5000); // 5 second timeout (reduced from 10s)
+    
+    try {
+      console.log('📤 Fetching:', `${API_URL}${endpoint}`);
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...this.getHeaders(),
+          ...options.headers,
+        },
+      });
+      
+      clearTimeout(timeoutId);
+      console.log('📥 Response received:', response.status, response.statusText);
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || 'Request failed');
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        console.error('❌ Response not OK:', error);
+        throw new Error(error.error || 'Request failed');
+      }
+
+      const data = await response.json();
+      console.log('✅ Request successful');
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      console.error('🚨 Request error caught:', error.name, error.message);
+      
+      // Handle different error types
+      if (error.name === 'AbortError') {
+        console.error('⏱️ Request timeout - you may be offline');
+        throw new Error('NETWORK_TIMEOUT');
+      }
+      
+      if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
+        console.error('🔌 Network error - you appear to be offline');
+        throw new Error('NETWORK_ERROR');
+      }
+      
+      console.error('❌ Throwing error:', error.message);
+      throw error;
     }
-
-    return response.json();
   }
 
   // Auth

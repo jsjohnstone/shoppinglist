@@ -13,7 +13,21 @@ import { queueManager } from '@/lib/queueManager';
 import { initDB } from '@/lib/db';
 import { LogOut, ShoppingCart, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Keep retrying failed queries
+      retry: 3,
+      retryDelay: 1000,
+    },
+    mutations: {
+      // CRITICAL: Don't pause mutations when offline - let our error handling deal with it
+      networkMode: 'always',
+      // Don't retry, let our queue handle it
+      retry: 0,
+    },
+  },
+});
 
 function ShoppingListApp() {
   const [user, setUser] = useState(null);
@@ -45,10 +59,31 @@ function ShoppingListApp() {
     initDB();
   }, []);
 
-  // Online/offline detection
+  // Online/offline detection with queue processing
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = async () => {
+      console.log('🌐 Back online! Processing queued operations...');
+      setIsOnline(true);
+      
+      // Process queue when coming back online
+      const result = await queueManager.processQueue();
+      
+      if (result && result.processed > 0) {
+        console.log(`🔄 Refreshing UI after processing ${result.processed} operations`);
+        // Force immediate refetch of items to get real server state
+        await queryClient.refetchQueries(['items'], { force: true });
+        console.log('✅ UI refreshed with server state');
+      } else {
+        // Still refresh even if no queue items, in case SSE missed updates
+        console.log('🔄 Refreshing UI to sync with server');
+        queryClient.invalidateQueries(['items']);
+      }
+    };
+    
+    const handleOffline = () => {
+      console.log('📴 Gone offline');
+      setIsOnline(false);
+    };
     
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -57,7 +92,7 @@ function ShoppingListApp() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [queryClient]);
 
   // Update queue count
   useEffect(() => {
@@ -73,26 +108,34 @@ function ShoppingListApp() {
   useEffect(() => {
     if (!user) return;
     
+    console.log('🔌 Initializing SSE connection for user:', user.username);
+    
     sseClient.current = new SSEClient(
       // onMessage
       (event) => {
+        console.log('📥 Processing SSE event:', event.type);
         // Invalidate queries to refetch data
         if (event.type === 'item_added' || 
             event.type === 'item_updated' || 
             event.type === 'item_deleted' ||
             event.type === 'item_toggled') {
+          console.log('🔄 Invalidating items query due to:', event.type);
           queryClient.invalidateQueries(['items']);
         }
       },
       // onError
       (error) => {
-        console.error('SSE error:', error);
+        console.error('❌ SSE Error in App:', error);
       }
     );
     
-    sseClient.current.connect(api.token);
+    const connected = sseClient.current.connect(api.token);
+    if (!connected) {
+      console.warn('⚠️ SSE not supported, relying on manual refresh');
+    }
     
     return () => {
+      console.log('🔌 Disconnecting SSE');
       sseClient.current?.disconnect();
     };
   }, [user, queryClient]);
@@ -150,35 +193,201 @@ function ShoppingListApp() {
     enabled: !!user,
   });
 
-  // Add item mutation (back to original - queue manager causing issues)
+  // Add item mutation with optimistic updates and offline support
   const addItemMutation = useMutation({
-    mutationFn: (itemData) => api.addItem(itemData),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['items']);
+    mutationFn: async (itemData) => {
+      console.log('➕ Add item mutation called:', itemData);
+      const tempId = `temp-${Date.now()}`;
+      
+      // Add optimistically to UI
+      console.log('✨ Adding optimistic item with tempId:', tempId);
+      queryClient.setQueryData(['items'], (old = []) => [
+        { ...itemData, id: tempId, isOptimistic: true },
+        ...old
+      ]);
+      
+      try {
+        console.log('📡 Attempting API call...');
+        const result = await api.addItem(itemData);
+        console.log('✅ API call succeeded:', result);
+        // Replace optimistic with real
+        queryClient.setQueryData(['items'], (old = []) =>
+          old.map(item => item.id === tempId ? result : item)
+        );
+        return result;
+      } catch (error) {
+        console.log('❗ API call failed:', error.message);
+        // Check if it's a network error
+        if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
+          console.log('📦 Network error detected - queueing operation');
+          try {
+            await queueManager.queueOperation({
+              type: 'add',
+              data: itemData,
+              tempId
+            });
+            console.log('✅ Operation queued successfully');
+            // Keep optimistic item with pending indicator
+            queryClient.setQueryData(['items'], (old = []) =>
+              old.map(item => item.id === tempId ? { ...item, isPending: true } : item)
+            );
+            return { ...itemData, id: tempId, isPending: true };
+          } catch (queueError) {
+            console.error('❌ Failed to queue operation:', queueError);
+            throw queueError;
+          }
+        }
+        console.log('❌ Real error (not network) - removing optimistic item');
+        // Real error - remove optimistic item
+        queryClient.setQueryData(['items'], (old = []) =>
+          old.filter(item => item.id !== tempId)
+        );
+        throw error;
+      }
+    },
+    onSuccess: (result) => {
+      console.log('🎉 Mutation onSuccess:', result);
+      if (!result.isPending) {
+        queryClient.invalidateQueries(['items']);
+      }
+    },
+    onError: (error) => {
+      console.error('💥 Mutation onError:', error);
     },
   });
 
-  // Toggle complete mutation (back to original)
+  // Toggle complete mutation with optimistic updates
   const toggleCompleteMutation = useMutation({
-    mutationFn: (id) => api.toggleItemComplete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['items']);
+    mutationFn: async (id) => {
+      console.log('🔄 Toggle mutation called for item:', id);
+      
+      // Optimistic toggle
+      console.log('✨ Toggling item optimistically');
+      queryClient.setQueryData(['items'], (old = []) =>
+        old.map(item =>
+          item.id === id
+            ? { ...item, isCompleted: !item.isCompleted, isOptimistic: true }
+            : item
+        )
+      );
+      
+      try {
+        console.log('📡 Attempting toggle API call...');
+        const result = await api.toggleItemComplete(id);
+        console.log('✅ Toggle API call succeeded:', result);
+        return result;
+      } catch (error) {
+        console.log('❗ Toggle API call failed:', error.message);
+        if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
+          console.log('📦 Network error - queueing toggle operation');
+          try {
+            await queueManager.queueOperation({
+              type: 'toggle',
+              id
+            });
+            console.log('✅ Toggle operation queued');
+            // Keep optimistic state with pending indicator
+            queryClient.setQueryData(['items'], (old = []) =>
+              old.map(item => item.id === id ? { ...item, isPending: true } : item)
+            );
+            return { id, isPending: true };
+          } catch (queueError) {
+            console.error('❌ Failed to queue toggle:', queueError);
+            throw queueError;
+          }
+        }
+        console.log('↩️ Real error - rolling back toggle');
+        // Rollback on real error
+        queryClient.setQueryData(['items'], (old = []) =>
+          old.map(item =>
+            item.id === id
+              ? { ...item, isCompleted: !item.isCompleted, isOptimistic: false }
+              : item
+          )
+        );
+        throw error;
+      }
+    },
+    onSuccess: (result) => {
+      console.log('🎉 Toggle mutation onSuccess:', result);
+      if (!result?.isPending) {
+        queryClient.invalidateQueries(['items']);
+      }
+    },
+    onError: (error) => {
+      console.error('💥 Toggle mutation onError:', error);
     },
   });
 
-  // Delete item mutation (back to original)
+  // Delete item mutation with optimistic updates
   const deleteItemMutation = useMutation({
-    mutationFn: (id) => api.deleteItem(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['items']);
+    mutationFn: async (id) => {
+      // Optimistic delete
+      const previousItems = queryClient.getQueryData(['items']);
+      queryClient.setQueryData(['items'], (old = []) =>
+        old.filter(item => item.id !== id)
+      );
+      
+      try {
+        await api.deleteItem(id);
+        return { id };
+      } catch (error) {
+        if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
+          console.log('📦 Queueing delete operation for later');
+          await queueManager.queueOperation({
+            type: 'delete',
+            id
+          });
+          return { id, isPending: true };
+        }
+        // Rollback on real error
+        queryClient.setQueryData(['items'], previousItems);
+        throw error;
+      }
+    },
+    onSuccess: (result) => {
+      if (!result?.isPending) {
+        queryClient.invalidateQueries(['items']);
+      }
     },
   });
 
-  // Update item mutation (back to original)
+  // Update item mutation with optimistic updates
   const updateItemMutation = useMutation({
-    mutationFn: ({ id, data }) => api.updateItem(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['items']);
+    mutationFn: async ({ id, data }) => {
+      // Optimistic update
+      const previousItems = queryClient.getQueryData(['items']);
+      queryClient.setQueryData(['items'], (old = []) =>
+        old.map(item =>
+          item.id === id ? { ...item, ...data, isOptimistic: true } : item
+        )
+      );
+      
+      try {
+        const result = await api.updateItem(id, data);
+        return result;
+      } catch (error) {
+        if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
+          console.log('📦 Queueing update operation for later');
+          await queueManager.queueOperation({
+            type: 'update',
+            id,
+            data
+          });
+          queryClient.setQueryData(['items'], (old = []) =>
+            old.map(item => item.id === id ? { ...item, isPending: true } : item)
+          );
+          return { id, isPending: true };
+        }
+        // Rollback on real error
+        queryClient.setQueryData(['items'], previousItems);
+        throw error;
+      }
+    },
+    onSuccess: (result) => {
+      if (!result?.isPending) {
+        queryClient.invalidateQueries(['items']);
+      }
     },
   });
 

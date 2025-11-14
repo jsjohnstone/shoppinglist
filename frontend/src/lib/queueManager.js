@@ -27,23 +27,10 @@ class QueueManager {
   }
   
   async queueOperation(operation) {
-    // Try to execute immediately if online
-    if (this.isOnline) {
-      try {
-        const result = await this.executeOperation(operation);
-        return { success: true, result };
-      } catch (error) {
-        console.error('Operation failed, queueing for later:', error);
-        // If failed, add to queue
-        await addToQueue(operation);
-        return { success: false, queued: true };
-      }
-    } else {
-      // Offline - add to queue
-      console.log('Offline: Queueing operation', operation.type);
-      await addToQueue(operation);
-      return { success: false, queued: true };
-    }
+    // Just add to queue - mutations handle the immediate attempt
+    console.log('📦 Adding operation to queue:', operation.type);
+    await addToQueue(operation);
+    return { queued: true };
   }
   
   async executeOperation(op) {
@@ -69,22 +56,25 @@ class QueueManager {
     const pendingOps = operations.filter(op => op.status === 'pending');
     
     if (pendingOps.length > 0) {
-      console.log(`Processing ${pendingOps.length} queued operations`);
+      console.log(`🔄 Processing ${pendingOps.length} queued operations`);
     }
+    
+    let processedCount = 0;
     
     for (const op of pendingOps) {
       try {
-        await this.executeOperation(op);
+        const result = await this.executeOperation(op);
         await removeFromQueue(op.id);
-        console.log(`Processed queued operation: ${op.type}`);
+        processedCount++;
+        console.log(`✅ Processed queued operation ${processedCount}/${pendingOps.length}:`, op.type, result);
       } catch (error) {
-        console.error(`Failed to process queued operation ${op.id}:`, error);
+        console.error(`❌ Failed to process queued operation ${op.id}:`, error);
         // Increment retry count
         const newRetries = (op.retries || 0) + 1;
         if (newRetries > 5) {
           // Give up after 5 retries
           await updateQueueItem(op.id, { status: 'failed', retries: newRetries });
-          console.error(`Operation ${op.id} failed after ${newRetries} retries`);
+          console.error(`💀 Operation ${op.id} failed after ${newRetries} retries`);
         } else {
           await updateQueueItem(op.id, { retries: newRetries });
         }
@@ -92,6 +82,13 @@ class QueueManager {
     }
     
     this.processing = false;
+    
+    if (processedCount > 0) {
+      console.log(`🎉 Queue processing complete! Processed ${processedCount} operations`);
+      return { processed: processedCount, total: pendingOps.length };
+    }
+    
+    return { processed: 0, total: 0 };
   }
   
   async getQueueCount() {

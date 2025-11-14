@@ -443,9 +443,15 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
           items: [],
           icon: item.categoryIcon,
           color: item.categoryColor,
+          completedCount: 0,
+          totalCount: 0,
         };
       }
       groups[category].items.push(item);
+      groups[category].totalCount++;
+      if (item.isCompleted) {
+        groups[category].completedCount++;
+      }
     });
     
     // Sort items within each category
@@ -523,9 +529,10 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     );
   }
 
-  const renderItemList = (itemsToRender, title, categoryName = null, categoryIcon = null, categoryColor = null) => {
+  const renderItemList = (itemsToRender, title, categoryName = null, categoryIcon = null, categoryColor = null, completedCount = null, totalCount = null) => {
     const isCollapsed = categoryName && collapsedCategories.has(categoryName);
     const Icon = categoryIcon ? getIcon(categoryIcon) : null;
+    const showCounts = completedCount !== null && totalCount !== null;
     
     return (
       <Card key={title}>
@@ -543,6 +550,11 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
             )}
             {Icon && <Icon className="h-5 w-5" />}
             {title}
+            {showCounts && (
+              <span className="ml-2 text-sm font-normal text-gray-600 dark:text-gray-400">
+                {completedCount}/{totalCount}
+              </span>
+            )}
           </h2>
         </div>
         {!isCollapsed && (
@@ -633,9 +645,31 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
         </>
       ) : (
         <>
-          {Object.entries(groupedByCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryData]) =>
-            renderItemList(categoryData.items, `${category} (${categoryData.items.length})`, category, categoryData.icon, categoryData.color)
-          )}
+          {Object.entries(groupedByCategory)
+            .sort(([aName, aData], [bName, bData]) => {
+              // Calculate incomplete count for each category
+              const aIncomplete = aData.totalCount - aData.completedCount;
+              const bIncomplete = bData.totalCount - bData.completedCount;
+              
+              // If both have incomplete items, or both are fully complete, sort alphabetically
+              if ((aIncomplete > 0 && bIncomplete > 0) || (aIncomplete === 0 && bIncomplete === 0)) {
+                return aName.localeCompare(bName);
+              }
+              
+              // Categories with incomplete items come first
+              return bIncomplete - aIncomplete;
+            })
+            .map(([category, categoryData]) =>
+              renderItemList(
+                categoryData.items, 
+                category, 
+                category, 
+                categoryData.icon, 
+                categoryData.color,
+                categoryData.completedCount,
+                categoryData.totalCount
+              )
+            )}
         </>
       )}
 

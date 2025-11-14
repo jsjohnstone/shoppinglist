@@ -16,6 +16,7 @@ A self-hosted shopping list application - includes a beautifully simple UI and l
 
 - Node.js + Express + PostgreSQL backend
 - React 18 + Vite frontend
+- Integrates with Ollama (smart shopping list), HomeAssistant (announcements and Voice integration) and [other cool projects](https://www.github.com/jsjohnstone/shoppinglist-barcodescanner)
 
 ## Environment Variables
 

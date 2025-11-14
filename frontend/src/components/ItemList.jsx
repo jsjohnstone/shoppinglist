@@ -378,7 +378,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 100,
+        delay: 500,
         tolerance: 15,
       },
     }),

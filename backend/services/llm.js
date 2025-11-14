@@ -50,6 +50,7 @@ CRITICAL RULES FOR NOTES:
 - DO NOT add descriptions, opinions, marketing language, or recipes
 - DO NOT add subjective comments (delicious, healthy, tasty, etc.)
 - DO NOT add usage suggestions or preparation ideas
+- DO NOT specify quantity unless it is specified in the input (eg "milk" does not mean "2L milk")
 - MOST items should have NOTES: NONE - only add notes when truly necessary
 - Keep notes to 2-3 words maximum
 - Notes are for product specifications, NOT commentary

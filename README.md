@@ -2,6 +2,8 @@
 
 A self-hosted shopping list application - includes a beautifully simple UI and lots of smarts to make adding and managing items nice and easy.
 
+![](./docs/screenshot.png)
+
 ## Features
 
 - 📝 Add, edit, delete shopping list items

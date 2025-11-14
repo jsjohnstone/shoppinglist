@@ -1,10 +1,33 @@
 import winston from 'winston';
 
-// Custom format for clean, readable console output
+// Helper to format metadata as key=value pairs
+function formatMeta(meta) {
+  if (!meta || Object.keys(meta).length === 0) {
+    return '';
+  }
+  
+  const pairs = [];
+  for (const [key, value] of Object.entries(meta)) {
+    // Handle different value types
+    if (value === null || value === undefined) {
+      pairs.push(`${key}=null`);
+    } else if (typeof value === 'object') {
+      // For objects, use compact JSON
+      pairs.push(`${key}=${JSON.stringify(value)}`);
+    } else if (typeof value === 'string' && value.includes(' ')) {
+      // Quote strings with spaces
+      pairs.push(`${key}="${value}"`);
+    } else {
+      pairs.push(`${key}=${value}`);
+    }
+  }
+  
+  return ' ' + pairs.join(' ');
+}
+
+// Custom format for single-line console output
 const consoleFormat = winston.format.printf(({ level, message, timestamp, ...meta }) => {
-  const metaStr = Object.keys(meta).length > 0 
-    ? '\n  ' + JSON.stringify(meta, null, 2).split('\n').join('\n  ')
-    : '';
+  const metaStr = formatMeta(meta);
   return `[${timestamp}] ${level.toUpperCase().padEnd(5)} ${message}${metaStr}`;
 });
 

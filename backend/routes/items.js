@@ -61,12 +61,12 @@ function broadcastToUser(userId, event) {
 
     // Add client to set
     const clientId = Date.now();
-    const client = { id: clientId, userId: user.userId, res };
+    const client = { id: clientId, userId: user.id, res };
     sseClients.add(client);
 
     logger.info('SSE client connected', {
       clientId,
-      userId: user.userId
+      userId: user.id
     });
 
   // Send initial connection message
@@ -341,8 +341,8 @@ router.get('/', authenticateToken, async (req, res) => {
     res.status(201).json(itemWithCategory);
 
     // Broadcast to all users
-    if (req.user?.userId) {
-      broadcastToUser(req.user.userId, {
+    if (req.user?.id) {
+      broadcastToUser(req.user.id, {
         type: 'item_added',
         item: itemWithCategory,
       });
@@ -795,8 +795,8 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
     res.json(itemWithCategory);
 
     // Broadcast to all users
-    if (req.user?.userId) {
-      broadcastToUser(req.user.userId, {
+    if (req.user?.id) {
+      broadcastToUser(req.user.id, {
         type: 'item_updated',
         item: itemWithCategory,
       });
@@ -840,8 +840,8 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
     res.json(updatedItem);
 
     // Broadcast to all users
-    if (req.user?.userId) {
-      broadcastToUser(req.user.userId, {
+    if (req.user?.id) {
+      broadcastToUser(req.user.id, {
         type: 'item_toggled',
         item: updatedItem,
       });
@@ -880,8 +880,8 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
       res.json({ message: 'Item deleted successfully' });
 
       // Broadcast to all users
-      if (req.user?.userId) {
-        broadcastToUser(req.user.userId, {
+      if (req.user?.id) {
+        broadcastToUser(req.user.id, {
           type: 'item_deleted',
           itemId: parseInt(id),
         });

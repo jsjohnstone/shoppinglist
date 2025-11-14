@@ -41,9 +41,17 @@ export async function normalizeItemName(itemName, existingQuantity = null) {
   try {
     const model = await getModel();
     const prompt = `You are a shopping list assistant. Process this grocery item and extract:
-1. Generic item name (remove brands, bullets, numbers, but keep essential product type)
+1. Item name (apply smart brand handling - see rules below)
 2. Quantity (ONLY if EXPLICITLY mentioned in the text - DO NOT INFER OR GUESS)
 3. Notes (ONLY essential product characteristics - variety, preparation type, or specific requirements)
+
+⚠️ CRITICAL RULES FOR BRAND NAMES:
+- For GENERIC/COMMODITY items (meat, produce, spices, dairy, flour, etc.), REMOVE the brand name
+  Examples: "Halalfoods Chicken Thighs" → "Chicken Thighs", "M&S Ground Coriander" → "Ground Coriander"
+- For BRANDED PACKAGED GOODS where the brand IS the product identity, KEEP the brand name
+  Examples: "Coca Cola" → "Coca Cola", "Pringles Paprika" → "Pringles", "Twix 2 pack" → "Twix"
+- Branded products include: sodas, chips/crisps, chocolate bars, cereals, cookies, instant meals, etc.
+- When in doubt: ask yourself "would a different brand be a completely different product?" If yes, keep the brand
 
 ⚠️ CRITICAL RULES FOR QUANTITY:
 - ONLY extract quantity if it is EXPLICITLY written in the input text
@@ -79,7 +87,50 @@ NAME: [generic name]
 QUANTITY: [quantity or NONE]
 NOTES: [brief characteristic or NONE]
 
-⚠️ QUANTITY EXAMPLES - READ CAREFULLY:
+⚠️ COMPLETE EXAMPLES - READ CAREFULLY:
+
+BRAND NAME HANDLING EXAMPLES:
+Input: "2kg Halalfoods Chicken Thighs, Skinless and Boneless"
+NAME: Chicken Thighs
+QUANTITY: 2kg
+NOTES: Skinless, boneless
+
+Input: "M&S Ground Coriander"
+NAME: Ground Coriander
+QUANTITY: NONE
+NOTES: NONE
+
+Input: "Coca Cola"
+NAME: Coca Cola
+QUANTITY: NONE
+NOTES: NONE
+
+Input: "Pringles Paprika"
+NAME: Pringles
+QUANTITY: NONE
+NOTES: Paprika
+
+Input: "Twix 2 pack"
+NAME: Twix
+QUANTITY: 2 pack
+NOTES: NONE
+
+Input: "Tesco Finest Salmon Fillet 400g"
+NAME: Salmon Fillet
+QUANTITY: 400g
+NOTES: NONE
+
+Input: "Heinz Baked Beans"
+NAME: Heinz Baked Beans
+QUANTITY: NONE
+NOTES: NONE
+
+Input: "Kellogg's Corn Flakes"
+NAME: Kellogg's Corn Flakes
+QUANTITY: NONE
+NOTES: NONE
+
+QUANTITY EXAMPLES:
 Input: "Skippy Super Chunk Peanut Butter 500g"
 NAME: Peanut Butter
 QUANTITY: 500g
@@ -97,11 +148,6 @@ NOTES: NONE
 
 Input: "bread" (NO quantity in text!)
 NAME: Bread
-QUANTITY: NONE
-NOTES: NONE
-
-Input: "Dog Food"
-NAME: Dog Food
 QUANTITY: NONE
 NOTES: NONE
 
@@ -125,30 +171,10 @@ NAME: Yogurt
 QUANTITY: NONE
 NOTES: Greek style
 
-Input: "Cat Food"
-NAME: Cat Food
-QUANTITY: NONE
-NOTES: NONE
-
-Input: "Chicken Breast"
-NAME: Chicken Breast
-QUANTITY: NONE
-NOTES: NONE
-
 Input: "Boneless Skinless Chicken Thighs"
 NAME: Chicken Thighs
 QUANTITY: NONE
 NOTES: Boneless, skinless
-
-Input: "1. Granny Smith Apples"
-NAME: Apples
-QUANTITY: NONE
-NOTES: Granny Smith
-
-Input: "Bread"
-NAME: Bread
-QUANTITY: NONE
-NOTES: NONE
 
 ${existingQuantity ? `Note: Quantity already specified as "${existingQuantity}", so only extract if different or more specific.\n` : ''}
 Product: ${itemName}`;

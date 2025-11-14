@@ -41,6 +41,7 @@ function ShoppingListApp() {
   });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [queueCount, setQueueCount] = useState(0);
+  const [processingQueue, setProcessingQueue] = useState(false);
   const queryClient = useQueryClient();
   const sseClient = useRef(null);
 
@@ -64,19 +65,25 @@ function ShoppingListApp() {
     const handleOnline = async () => {
       console.log('🌐 Back online! Processing queued operations...');
       setIsOnline(true);
+      setProcessingQueue(true);
       
-      // Process queue when coming back online
-      const result = await queueManager.processQueue();
-      
-      if (result && result.processed > 0) {
-        console.log(`🔄 Refreshing UI after processing ${result.processed} operations`);
-        // Force immediate refetch of items to get real server state
-        await queryClient.refetchQueries(['items'], { force: true });
-        console.log('✅ UI refreshed with server state');
-      } else {
-        // Still refresh even if no queue items, in case SSE missed updates
-        console.log('🔄 Refreshing UI to sync with server');
-        queryClient.invalidateQueries(['items']);
+      try {
+        // Process queue when coming back online
+        const result = await queueManager.processQueue();
+        
+        if (result && result.processed > 0) {
+          console.log(`🔄 Refreshing UI after processing ${result.processed} operations`);
+          // Force immediate refetch of items to get real server state
+          await queryClient.refetchQueries(['items'], { force: true });
+          console.log('✅ UI refreshed with server state');
+        } else {
+          // Still refresh even if no queue items, in case SSE missed updates
+          console.log('🔄 Refreshing UI to sync with server');
+          queryClient.invalidateQueries(['items']);
+        }
+      } finally {
+        // Always re-enable SSE handling after queue completes
+        setProcessingQueue(false);
       }
     };
     
@@ -113,7 +120,14 @@ function ShoppingListApp() {
     sseClient.current = new SSEClient(
       // onMessage
       (event) => {
-        console.log('📥 Processing SSE event:', event.type);
+        console.log('📥 SSE event received:', event.type);
+        
+        // CRITICAL: Ignore SSE events while processing queue to prevent race conditions
+        if (processingQueue) {
+          console.log('⏸️  Ignoring SSE event (queue processing in progress)');
+          return;
+        }
+        
         // Invalidate queries to refetch data
         if (event.type === 'item_added' || 
             event.type === 'item_updated' || 
@@ -138,7 +152,7 @@ function ShoppingListApp() {
       console.log('🔌 Disconnecting SSE');
       sseClient.current?.disconnect();
     };
-  }, [user, queryClient]);
+  }, [user, queryClient, processingQueue]);
 
   // Check if user is already logged in
   useEffect(() => {

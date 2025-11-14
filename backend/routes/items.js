@@ -29,6 +29,18 @@ function broadcastToUser(userId, event) {
   });
 }
 
+// Helper to broadcast to ALL connected clients (for device/API additions)
+function broadcastToAll(event) {
+  sseClients.forEach(client => {
+    try {
+      client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch (error) {
+      console.error('Error broadcasting to client:', error);
+      sseClients.delete(client);
+    }
+  });
+}
+
   // SSE endpoint for real-time updates
   // Supports both header auth (JWT in Authorization header) and query param auth (for EventSource)
   router.get('/events', async (req, res) => {
@@ -642,6 +654,12 @@ router.post('/barcode', authenticateDevice, async (req, res) => {
       tts_message: ttsResult.message,
       tts_announced: ttsResult.announced,
     });
+
+    // Broadcast to all connected web clients
+    broadcastToAll({
+      type: 'item_added',
+      item: itemWithCategory,
+    });
   } catch (error) {
     console.error('Error processing barcode:', error);
     res.status(500).json({ error: 'Failed to process barcode' });
@@ -697,6 +715,12 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
 
     // Return immediately with processing state
     res.status(201).json(itemWithCategory);
+
+    // Broadcast to all connected web clients
+    broadcastToAll({
+      type: 'item_added',
+      item: itemWithCategory,
+    });
 
     // Process asynchronously if Ollama is enabled and not skipped
     if (shouldProcess) {

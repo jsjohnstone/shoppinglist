@@ -431,7 +431,7 @@ function ShoppingListApp() {
       <OfflineBanner isOnline={isOnline} queueCount={queueCount} />
       
       <header>
-        <div className="max-w-4xl mx-auto px-6 pt-6 pb-5 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto md:px-6 px-5 md:pt-6 md:pb-5 pt-4 pb-3 flex items-center justify-between">
           {/* Left side */}
           <div className="flex items-center gap-2">
             {/* Logo icon - always visible */}
@@ -494,8 +494,8 @@ function ShoppingListApp() {
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       <footer>
-        <div className="max-w-4xl mx-auto px-6 pt-6 pb-5 flex items-center justify-center">
-          <div className="flex items-center text-center text-gray-600">Built with snacks by Blake ❤️</div>
+        <div className="max-w-4xl mx-auto px-6 pt-6 pb-8 flex items-center justify-center">
+          <div className="flex items-center text-center text-gray-400">...did you get Blake a snack? 👀 🐾</div>
         </div>
       </footer>
     </div>

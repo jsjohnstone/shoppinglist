@@ -1,6 +1,8 @@
 import { Ollama } from 'ollama';
 import { getSetting } from '../routes/settings.js';
 import logger from '../logger.js';
+import { db } from '../db/index.js';
+import { categories } from '../db/schema.js';
 
 // Create Ollama instance dynamically based on settings
 async function getOllamaInstance() {
@@ -263,15 +265,20 @@ export async function suggestCategory(itemName) {
   logger.debug('LLM category suggestion started', { itemName });
 
   try {
+    // Fetch categories from database
+    const allCategories = await db.select({ name: categories.name }).from(categories);
+    
+    if (allCategories.length === 0) {
+      logger.warn('No categories found in database', { itemName });
+      return null;
+    }
+
+    // Build category list for prompt
+    const categoryList = allCategories.map(c => `- ${c.name}`).join('\n');
+
     const model = await getModel();
     const prompt = `You are a grocery categorization assistant. Given an item name, return ONLY ONE category name from this list:
-- Vegetables
-- Fruit
-- Meat
-- Dairy
-- Bakery
-- Pantry Aisles
-- Household
+${categoryList}
 
 Be concise - return ONLY the category name, nothing else.
 

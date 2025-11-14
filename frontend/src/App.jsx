@@ -261,12 +261,17 @@ function ShoppingListApp() {
     mutationFn: async (id) => {
       console.log('🔄 Toggle mutation called for item:', id);
       
+      // Get current item to know what state we're toggling TO
+      const currentItems = queryClient.getQueryData(['items']) || [];
+      const currentItem = currentItems.find(item => item.id === id);
+      const targetCompletedState = currentItem ? !currentItem.isCompleted : true;
+      
       // Optimistic toggle
-      console.log('✨ Toggling item optimistically');
+      console.log('✨ Toggling item optimistically to:', targetCompletedState);
       queryClient.setQueryData(['items'], (old = []) =>
         old.map(item =>
           item.id === id
-            ? { ...item, isCompleted: !item.isCompleted, isOptimistic: true }
+            ? { ...item, isCompleted: targetCompletedState, isOptimistic: true }
             : item
         )
       );
@@ -279,13 +284,15 @@ function ShoppingListApp() {
       } catch (error) {
         console.log('❗ Toggle API call failed:', error.message);
         if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
-          console.log('📦 Network error - queueing toggle operation');
+          console.log('📦 Network error - queueing setComplete operation with target state:', targetCompletedState);
           try {
+            // IMPORTANT: Store the TARGET state, not just "toggle"
             await queueManager.queueOperation({
-              type: 'toggle',
-              id
+              type: 'setComplete',
+              id,
+              targetState: targetCompletedState
             });
-            console.log('✅ Toggle operation queued');
+            console.log('✅ SetComplete operation queued');
             // Keep optimistic state with pending indicator
             queryClient.setQueryData(['items'], (old = []) =>
               old.map(item => item.id === id ? { ...item, isPending: true } : item)
@@ -301,7 +308,7 @@ function ShoppingListApp() {
         queryClient.setQueryData(['items'], (old = []) =>
           old.map(item =>
             item.id === id
-              ? { ...item, isCompleted: !item.isCompleted, isOptimistic: false }
+              ? { ...item, isCompleted: !targetCompletedState, isOptimistic: false }
               : item
           )
         );

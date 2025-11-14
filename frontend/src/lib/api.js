@@ -141,6 +141,13 @@ class ApiClient {
     });
   }
 
+  async setItemComplete(id, isCompleted) {
+    return this.request(`/items/${id}/complete`, {
+      method: 'PUT',
+      body: JSON.stringify({ isCompleted }),
+    });
+  }
+
   async deleteItem(id) {
     return this.request(`/items/${id}`, {
       method: 'DELETE',

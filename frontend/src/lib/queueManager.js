@@ -40,7 +40,11 @@ class QueueManager {
       case 'update':
         return await api.updateItem(op.id, op.data);
       case 'toggle':
+        // Legacy support for old toggle operations
         return await api.toggleItemComplete(op.id);
+      case 'setComplete':
+        // Set item to specific completion state
+        return await api.setItemComplete(op.id, op.targetState);
       case 'delete':
         return await api.deleteItem(op.id);
       default:

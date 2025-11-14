@@ -852,6 +852,51 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
   }
 });
 
+// Set item completion status to specific value (for offline queue)
+router.put('/:id/complete', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isCompleted } = req.body;
+
+    if (typeof isCompleted !== 'boolean') {
+      return res.status(400).json({ error: 'isCompleted must be a boolean' });
+    }
+
+    // Get current item
+    const [currentItem] = await db.select()
+      .from(items)
+      .where(eq(items.id, parseInt(id)))
+      .limit(1);
+
+    if (!currentItem) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Set to specific completion state
+    const [updatedItem] = await db.update(items)
+      .set({
+        isCompleted,
+        completedAt: isCompleted ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(items.id, parseInt(id)))
+      .returning();
+
+    res.json(updatedItem);
+
+    // Broadcast to all users
+    if (req.user?.id) {
+      broadcastToUser(req.user.id, {
+        type: 'item_toggled',
+        item: updatedItem,
+      });
+    }
+  } catch (error) {
+    console.error('Error setting item completion:', error);
+    res.status(500).json({ error: 'Failed to set completion status' });
+  }
+});
+
   // Delete item
   router.delete('/:id', authenticateToken, async (req, res) => {
     try {

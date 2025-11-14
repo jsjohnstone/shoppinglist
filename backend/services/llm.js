@@ -42,15 +42,24 @@ export async function normalizeItemName(itemName, existingQuantity = null) {
     const model = await getModel();
     const prompt = `You are a shopping list assistant. Process this grocery item and extract:
 1. Generic item name (remove brands, bullets, numbers, but keep essential product type)
-2. Quantity (if mentioned in the text)
+2. Quantity (ONLY if EXPLICITLY mentioned in the text - DO NOT INFER OR GUESS)
 3. Notes (ONLY essential product characteristics - variety, preparation type, or specific requirements)
+
+⚠️ CRITICAL RULES FOR QUANTITY:
+- ONLY extract quantity if it is EXPLICITLY written in the input text
+- DO NOT infer, assume, or guess quantities based on typical sizes
+- "milk" = QUANTITY: NONE (no quantity mentioned)
+- "2L milk" = QUANTITY: 2L (quantity explicitly stated)
+- "bread" = QUANTITY: NONE (no quantity mentioned)
+- "3 eggs" = QUANTITY: 3 (quantity explicitly stated)
+- If you cannot find a number or amount in the actual input text, ALWAYS use NONE
+- DO NOT use your knowledge of typical product sizes to add quantities
 
 CRITICAL RULES FOR NOTES:
 - ONLY include notes for essential product characteristics (variety, preparation type, cut, fat content)
 - DO NOT add descriptions, opinions, marketing language, or recipes
 - DO NOT add subjective comments (delicious, healthy, tasty, etc.)
 - DO NOT add usage suggestions or preparation ideas
-- DO NOT specify quantity unless it is specified in the input (eg "milk" does not mean "2L milk")
 - MOST items should have NOTES: NONE - only add notes when truly necessary
 - Keep notes to 2-3 words maximum
 - Notes are for product specifications, NOT commentary
@@ -70,7 +79,7 @@ NAME: [generic name]
 QUANTITY: [quantity or NONE]
 NOTES: [brief characteristic or NONE]
 
-Examples:
+⚠️ QUANTITY EXAMPLES - READ CAREFULLY:
 Input: "Skippy Super Chunk Peanut Butter 500g"
 NAME: Peanut Butter
 QUANTITY: 500g
@@ -79,6 +88,16 @@ NOTES: Crunchy
 Input: "2L Milk"
 NAME: Milk
 QUANTITY: 2L
+NOTES: NONE
+
+Input: "milk" (NO quantity in text!)
+NAME: Milk
+QUANTITY: NONE
+NOTES: NONE
+
+Input: "bread" (NO quantity in text!)
+NAME: Bread
+QUANTITY: NONE
 NOTES: NONE
 
 Input: "Dog Food"
@@ -140,6 +159,9 @@ Product: ${itemName}`;
       model,
       prompt: prompt,
       stream: false,
+      options: {
+        temperature: 0.1, // Low temperature for more deterministic, conservative responses
+      },
     });
     
     const duration = Date.now() - startTime;
@@ -234,6 +256,9 @@ Category:`;
       model,
       prompt: prompt,
       stream: false,
+      options: {
+        temperature: 0.1, // Low temperature for more deterministic responses
+      },
     });
 
     const duration = Date.now() - startTime;

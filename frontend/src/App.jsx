@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import { SSEClient } from '@/lib/sseClient';
 import { queueManager } from '@/lib/queueManager';
 import { initDB } from '@/lib/db';
-import { LogOut, ShoppingCart, Settings as SettingsIcon, Moon, Sun } from 'lucide-react';
+import { LogOut, ShoppingCart, Settings as SettingsIcon } from 'lucide-react';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,27 +33,11 @@ function ShoppingListApp() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
   const [showSettings, setShowSettings] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    // Check localStorage or system preference
-    const saved = localStorage.getItem('darkMode');
-    if (saved !== null) return saved === 'true';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [queueCount, setQueueCount] = useState(0);
   const [processingQueue, setProcessingQueue] = useState(false);
   const queryClient = useQueryClient();
   const sseClient = useRef(null);
-
-  // Apply dark mode class to document
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('darkMode', darkMode.toString());
-  }, [darkMode]);
 
   // Initialize IndexedDB
   useEffect(() => {
@@ -447,11 +431,6 @@ function ShoppingListApp() {
             <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300">
               Hello, {user.username}!
             </span>
-            
-            {/* Dark mode toggle */}
-            <Button variant="ghost" size="sm" onClick={() => setDarkMode(!darkMode)}>
-              {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
             
             {/* Settings button */}
             <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>

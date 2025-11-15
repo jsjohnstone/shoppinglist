@@ -135,6 +135,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
 
 export function ItemForm({ onAdd, loading }) {
   const [name, setName] = useState('');
+  const [isNameActive, setIsNameActive] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [quantityDraft, setQuantityDraft] = useState('');
   const [notes, setNotes] = useState('');
@@ -149,6 +150,8 @@ export function ItemForm({ onAdd, loading }) {
   const [multiAddText, setMultiAddText] = useState('');
   
   const queryClient = useQueryClient();
+
+  const showBadges = !isMultiAdd && (isNameActive || name.trim().length > 0);
 
   // Fetch categories
   const { data: categories = [] } = useQuery({
@@ -191,16 +194,8 @@ export function ItemForm({ onAdd, loading }) {
         setProcessingBarcode(true);
         
         try {
-          // Lookup barcode from cache (we'll use existing items for now)
-          // In a full implementation, this would call a barcode lookup service
           const barcode = name.trim();
-          
-          // For now, just mark that we detected a barcode
-          // The actual barcode processing will happen on submit
           console.log('Barcode detected:', barcode);
-          
-          // We keep the barcode as-is in the name field
-          // User can still add quantity/notes before submitting
         } catch (error) {
           console.error('Error looking up barcode:', error);
         } finally {
@@ -212,7 +207,6 @@ export function ItemForm({ onAdd, loading }) {
       }
     };
 
-    // Debounce the barcode detection
     const timeoutId = setTimeout(detectAndLookupBarcode, 300);
     return () => clearTimeout(timeoutId);
   }, [name, processingBarcode, barcodeDetected]);
@@ -225,7 +219,6 @@ export function ItemForm({ onAdd, loading }) {
     const suggestions = items
       .filter(item => item.name.toLowerCase().includes(searchTerm))
       .reduce((acc, item) => {
-        // Deduplicate by name
         if (!acc.find(i => i.name === item.name)) {
           acc.push(item);
         }
@@ -298,15 +291,10 @@ export function ItemForm({ onAdd, loading }) {
     
     for (const line of lines) {
       let trimmed = line.trim();
-      
-      // Skip empty lines
       if (!trimmed) continue;
-      
-      // Remove bullet points and numbers: -, *, 1., 2., etc.
-      trimmed = trimmed.replace(/^[-*]\s*/, ''); // Remove - or *
-      trimmed = trimmed.replace(/^\d+\.\s*/, ''); // Remove 1. 2. etc.
+      trimmed = trimmed.replace(/^[-*]\s*/, '');
+      trimmed = trimmed.replace(/^\d+\.\s*/, '');
       trimmed = trimmed.trim();
-      
       if (trimmed) {
         items.push(trimmed);
       }
@@ -325,11 +313,10 @@ export function ItemForm({ onAdd, loading }) {
     e.preventDefault();
     
     if (isMultiAdd) {
-      // Multi-add mode: parse items and bulk add
       const itemTexts = parseMultiAddItems(multiAddText);
       
       if (itemTexts.length === 0) {
-        return; // No items to add
+        return;
       }
       
       if (itemTexts.length > 50) {
@@ -341,18 +328,12 @@ export function ItemForm({ onAdd, loading }) {
         const categoryId = category ? categories.find(c => c.name === category)?.id : null;
         const result = await api.bulkAddItems(itemTexts, relatedTo || null, categoryId);
         
-        // Invalidate items query to refetch
         queryClient.invalidateQueries(['items']);
-        
-        // Show success message
         console.log(`Added ${result.itemsAdded} items to shopping list`);
         
-        // Clear form
         setMultiAddText('');
         setRelatedTo('');
         setCategory('');
-        
-        // Reset expanded fields
         setExpandedFields({
           quantity: false,
           notes: false,
@@ -364,7 +345,6 @@ export function ItemForm({ onAdd, loading }) {
         alert(error.message || 'Failed to add items');
       }
     } else {
-      // Single add mode
       await onAdd({
         name,
         quantity: quantity || undefined,
@@ -374,7 +354,6 @@ export function ItemForm({ onAdd, loading }) {
         isBarcode: barcodeDetected,
       });
 
-      // Clear form
       setName('');
       setQuantity('');
       setNotes('');
@@ -383,7 +362,6 @@ export function ItemForm({ onAdd, loading }) {
       setBarcodeDetected(false);
       setProcessingBarcode(false);
       
-      // Reset expanded fields
       setExpandedFields({
         quantity: false,
         notes: false,
@@ -391,21 +369,17 @@ export function ItemForm({ onAdd, loading }) {
         category: false,
       });
 
-      // Return focus to the main add-item input
       nameInputRef.current?.focus();
     }
   };
 
   const toggleMultiAdd = () => {
     setIsMultiAdd(!isMultiAdd);
-    // Clear relevant fields when toggling
     if (!isMultiAdd) {
-      // Switching to multi-add mode - clear single-add fields
       setName('');
       setQuantity('');
       setNotes('');
     } else {
-      // Switching to single-add mode - clear multi-add field
       setMultiAddText('');
     }
     setBarcodeDetected(false);
@@ -417,314 +391,435 @@ export function ItemForm({ onAdd, loading }) {
       <div className="relative">
         <div className="flex gap-2">
           {isMultiAdd ? (
-            // Multi-add mode: Show textarea
-            <div className="flex-1">
-              <Textarea
-                value={multiAddText}
-                onChange={(e) => setMultiAddText(e.target.value)}
-                placeholder="Paste ingredient list (one per line)&#10;Example:&#10;2L Milk&#10;500g Flour&#10;- Eggs&#10;* Bread"
-                required
-                disabled={loading}
-                rows={8}
-                className="resize-none"
-              />
-              {multiAddItemCount > 0 && (
-                <div className="text-xs text-gray-500 mt-1">
-                  {multiAddItemCount} item{multiAddItemCount !== 1 ? 's' : ''} detected
-                  {multiAddItemCount > 50 && ' (max 50 allowed)'}
-                </div>
-              )}
-            </div>
-          ) : (
-            // Single-add mode: Show input
-            <div className="flex-1 relative">
-              <div className="relative">
-                <Input
-                  ref={nameInputRef}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setShowAutocomplete(e.target.value.length >= 2 && !isBarcode(e.target.value));
-                  }}
-                  onFocus={() => setShowAutocomplete(name.length >= 2 && !isBarcode(name))}
-                  onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
-                  placeholder="Add an item or scan barcode..."
+            // Multi-add mode: textarea + green + button (left) and multi-add toggle (right)
+            <>
+              <div className="flex-1">
+                <Textarea
+                  value={multiAddText}
+                  onChange={(e) => setMultiAddText(e.target.value)}
+                  placeholder="Paste ingredient list (one per line)&#10;Example:&#10;2L Milk&#10;500g Flour&#10;- Eggs&#10;* Bread"
                   required
                   disabled={loading}
-                  className="flex-1"
+                  rows={8}
+                  className="resize-none"
                 />
-                {barcodeDetected && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                    <Barcode className="h-4 w-4 text-gray-400" />
-                    {processingBarcode && (
-                      <span className="text-xs text-gray-500">Processing...</span>
-                    )}
+                {multiAddItemCount > 0 && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    {multiAddItemCount} item{multiAddItemCount !== 1 ? 's' : ''} detected
+                    {multiAddItemCount > 50 && ' (max 50 allowed)'}
                   </div>
                 )}
               </div>
-              {/* Quick Add Autocomplete - only show if not a barcode */}
-              {showAutocomplete && itemSuggestions.length > 0 && !barcodeDetected && (
-                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {itemSuggestions.map((item) => (
-                    <div
-                      key={item.id}
-                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-                      onMouseDown={() => handleSelectSuggestion(item)}
-                    >
-                      <div className="font-medium dark:text-gray-100">{item.name}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 flex gap-2 mt-1">
-                        {item.quantity && <span>Qty: {item.quantity}</span>}
-                        {item.categoryName && <span>• {item.categoryName}</span>}
-                      </div>
+              <button
+                type="submit"
+                disabled={loading || multiAddItemCount === 0 || multiAddItemCount > 50}
+                className="h-9 w-9 inline-flex items-center justify-center rounded-md bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={toggleMultiAdd}
+                title={isMultiAdd ? 'Switch to single add' : 'Switch to multi-add'}
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            // Single-add mode: input with inline plus, multi-add toggle on right
+            <>
+              <div className="flex-1 relative">
+                <div className="relative">
+                  <Input
+                    ref={nameInputRef}
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      setShowAutocomplete(e.target.value.length >= 2 && !isBarcode(e.target.value));
+                    }}
+                    onFocus={() => {
+                      setIsNameActive(true);
+                      setShowAutocomplete(name.length >= 2 && !isBarcode(name));
+                    }}
+                    onBlur={() => {
+                      setIsNameActive(false);
+                      setTimeout(() => setShowAutocomplete(false), 200);
+                    }}
+                    placeholder="Add an item or scan barcode..."
+                    required
+                    disabled={loading}
+                    className="flex-1 pr-10"
+                  />
+                  {barcodeDetected ? (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                      <Barcode className="h-4 w-4 text-gray-400" />
+                      {processingBarcode && (
+                        <span className="text-xs text-gray-500">Processing...</span>
+                      )}
                     </div>
-                  ))}
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={loading || !name}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded-md bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
+                {/* Quick Add Autocomplete - only show if not a barcode */}
+                {showAutocomplete && itemSuggestions.length > 0 && !barcodeDetected && (
+                  <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {itemSuggestions.map((item) => (
+                      <div
+                        key={item.id}
+                        className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+                        onMouseDown={() => handleSelectSuggestion(item)}
+                      >
+                        <div className="font-medium dark:text-gray-100">{item.name}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 flex gap-2 mt-1">
+                          {item.quantity && <span>Qty: {item.quantity}</span>}
+                          {item.categoryName && <span>• {item.categoryName}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={toggleMultiAdd}
+                title={isMultiAdd ? 'Switch to single add' : 'Switch to multi-add'}
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={toggleMultiAdd}
-            title={isMultiAdd ? "Switch to single add" : "Switch to multi-add"}
-          >
-            <FileText className="h-4 w-4" />
-          </Button>
-          <Button 
-            type="submit" 
-            disabled={loading || (isMultiAdd ? multiAddItemCount === 0 || multiAddItemCount > 50 : !name)}
-          >
-            {isMultiAdd && multiAddItemCount > 0 ? (
-              <>Add All ({multiAddItemCount})</>
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-          </Button>
         </div>
       </div>
 
       {/* Expandable field badges */}
-      <div className="flex flex-wrap gap-2">
-        {/* Quantity field - only show in single-add mode */}
-        {!isMultiAdd && (
-          <div className="relative">
-            <Badge 
-              variant="interactive"
-              onClick={openQuantityEditor}
-              className={`gap-1 ${quantity ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
-            >
-              <Scale className="h-3 w-3" />
-              {quantity ? quantity : 'Quantity'}
-              {quantity && (
-                <span
-                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setQuantity('');
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </span>
-              )}
-            </Badge>
-            {expandedFields.quantity && (
-              <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
-                  <Scale className="h-4 w-4 text-gray-500" />
-                  <Input
-                    value={quantityDraft}
-                    onChange={(e) => setQuantityDraft(e.target.value)}
-                    placeholder="Quantity (e.g., 2, 500g)"
-                    disabled={loading}
-                    className="flex-1 h-8 text-sm"
-                    autoFocus
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setQuantity(quantityDraft);
-                      closeQuantityEditor();
-                    }}
-                  >
-                    <Check className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
+      {showBadges && !isMultiAdd && (
+        <div className="flex flex-wrap gap-2">
+          {/* Quantity field - only show in single-add mode */}
+          {/* Quantity field - only show in single-add mode */}
+          {!isMultiAdd && (
+            <div className="relative">
+              <Badge 
+                variant="interactive"
+                onClick={openQuantityEditor}
+                className={`gap-1 ${quantity ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+              >
+                <Scale className="h-3 w-3" />
+                {quantity ? quantity : 'Quantity'}
+                {quantity && (
+                  <span
+                    className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setQuantity('');
-                      setQuantityDraft('');
-                      closeQuantityEditor();
                     }}
                   >
                     <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Category field */}
-        <div className="relative">
-          <Badge 
-            variant="interactive"
-            onClick={() => toggleField('category')}
-            className={`gap-1 ${category ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
-          >
-            <FolderOpen className="h-3 w-3" />
-            {category ? category : 'Category'}
-            {category && (
-              <span
-                className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCategory('');
-                }}
-              >
-                <X className="h-3 w-3" />
-              </span>
-            )}
-          </Badge>
-          {expandedFields.category && (
-            <SimpleAutocomplete
-              value={category}
-              options={categoryNames}
-              onSelect={(value) => {
-                setCategory(value);
-                toggleField('category');
-              }}
-              onClose={() => toggleField('category')}
-              onCreateNew={handleCreateCategory}
-              placeholder="Search categories..."
-              icon={FolderOpen}
-              renderOption={({ option, onSelect }) => {
-                const cat = categoryByName.get(option);
-                const IconComp = cat?.icon ? getIcon(cat.icon) : null;
-                const iconStyle = cat?.color ? { color: cat.color } : undefined;
-                return (
-                  <div
-                    key={option}
-                    className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2"
-                    onClick={() => onSelect(option)}
-                  >
-                    {IconComp && <IconComp className="h-3 w-3" style={iconStyle} />}
-                    <span>{option}</span>
+                  </span>
+                )}
+              </Badge>
+              {expandedFields.quantity && (
+                <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
+                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
+                    <Scale className="h-4 w-4 text-gray-500" />
+                    <Input
+                      value={quantityDraft}
+                      onChange={(e) => setQuantityDraft(e.target.value)}
+                      placeholder="Quantity (e.g., 2, 500g)"
+                      disabled={loading}
+                      className="flex-1 h-8 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setQuantity(quantityDraft);
+                        closeQuantityEditor();
+                      }}
+                    >
+                      <Check className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setQuantity('');
+                        setQuantityDraft('');
+                        closeQuantityEditor();
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
-                );
-              }}
-            />
+                </div>
+              )}
+            </div>
           )}
-        </div>
 
-        {/* Related To field */}
-        <div className="relative">
-          <Badge 
-            variant="interactive"
-            onClick={() => toggleField('relatedTo')}
-            className={`gap-1 ${relatedTo ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
-          >
-            <Tag className="h-3 w-3" />
-            {relatedTo ? relatedTo : 'Related To'}
-            {relatedTo && (
-              <span
-                className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRelatedTo('');
-                }}
-              >
-                <X className="h-3 w-3" />
-              </span>
-            )}
-          </Badge>
-          {expandedFields.relatedTo && (
-            <SimpleAutocomplete
-              value={relatedTo}
-              options={activeRelatedToValues}
-              onSelect={(value) => {
-                setRelatedTo(value);
-                toggleField('relatedTo');
-              }}
-              onClose={() => toggleField('relatedTo')}
-              onCreateNew={(value) => value}
-              placeholder="Type or select..."
-              icon={Tag}
-            />
-          )}
-        </div>
-
-        {/* Notes field - only show in single-add mode */}
-        {!isMultiAdd && (
+          {/* Category field */}
           <div className="relative">
             <Badge 
               variant="interactive"
-              onClick={openNotesEditor}
-              className={`gap-1 ${notes ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+              onClick={() => toggleField('category')}
+              className={`gap-1 ${category ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
             >
-              <StickyNote className="h-3 w-3" />
-              {notes ? `${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
-              {notes && (
+              <FolderOpen className="h-3 w-3" />
+              {category ? category : 'Category'}
+              {category && (
                 <span
                   className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setNotes('');
+                    setCategory('');
                   }}
                 >
                   <X className="h-3 w-3" />
                 </span>
               )}
             </Badge>
-            {expandedFields.notes && (
-              <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
-                  <StickyNote className="h-4 w-4 text-gray-500" />
-                  <Input
-                    value={notesDraft}
-                    onChange={(e) => setNotesDraft(e.target.value)}
-                    placeholder="Additional notes..."
-                    disabled={loading}
-                    className="flex-1 h-8 text-sm"
-                    autoFocus
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setNotes(notesDraft);
-                      closeNotesEditor();
-                    }}
-                  >
-                    <Check className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
+            {expandedFields.category && (
+              <SimpleAutocomplete
+                value={category}
+                options={categoryNames}
+                onSelect={(value) => {
+                  setCategory(value);
+                  toggleField('category');
+                }}
+                onClose={() => toggleField('category')}
+                onCreateNew={handleCreateCategory}
+                placeholder="Search categories..."
+                icon={FolderOpen}
+                renderOption={({ option, onSelect }) => {
+                  const cat = categoryByName.get(option);
+                  const IconComp = cat?.icon ? getIcon(cat.icon) : null;
+                  const iconStyle = cat?.color ? { color: cat.color } : undefined;
+                  return (
+                    <div
+                      key={option}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2"
+                      onClick={() => onSelect(option)}
+                    >
+                      {IconComp && <IconComp className="h-3 w-3" style={iconStyle} />}
+                      <span>{option}</span>
+                    </div>
+                  );
+                }}
+              />
+            )}
+          </div>
+
+          {/* Related To field */}
+          <div className="relative">
+            <Badge 
+              variant="interactive"
+              onClick={() => toggleField('relatedTo')}
+              className={`gap-1 ${relatedTo ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+            >
+              <Tag className="h-3 w-3" />
+              {relatedTo ? relatedTo : 'Related To'}
+              {relatedTo && (
+                <span
+                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRelatedTo('');
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+            </Badge>
+            {expandedFields.relatedTo && (
+              <SimpleAutocomplete
+                value={relatedTo}
+                options={activeRelatedToValues}
+                onSelect={(value) => {
+                  setRelatedTo(value);
+                  toggleField('relatedTo');
+                }}
+                onClose={() => toggleField('relatedTo')}
+                onCreateNew={(value) => value}
+                placeholder="Type or select..."
+                icon={Tag}
+              />
+            )}
+          </div>
+
+          {/* Notes field - only show in single-add mode */}
+          {!isMultiAdd && (
+            <div className="relative">
+              <Badge 
+                variant="interactive"
+                onClick={openNotesEditor}
+                className={`gap-1 ${notes ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+              >
+                <StickyNote className="h-3 w-3" />
+                {notes ? `${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
+                {notes && (
+                  <span
+                    className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setNotes('');
-                      setNotesDraft('');
-                      closeNotesEditor();
                     }}
                   >
                     <X className="h-3 w-3" />
-                  </Button>
+                  </span>
+                )}
+              </Badge>
+              {expandedFields.notes && (
+                <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
+                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
+                    <StickyNote className="h-4 w-4 text-gray-500" />
+                    <Input
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      placeholder="Additional notes..."
+                      disabled={loading}
+                      className="flex-1 h-8 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setNotes(notesDraft);
+                        closeNotesEditor();
+                      }}
+                    >
+                      <Check className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setNotes('');
+                        setNotesDraft('');
+                        closeNotesEditor();
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Multi-add badges: show Category and Related To even in multi-add mode */}
+      {isMultiAdd && (
+        <div className="flex flex-wrap gap-2">
+          {/* Category field */}
+          <div className="relative">
+            <Badge 
+              variant="interactive"
+              onClick={() => toggleField('category')}
+              className={`gap-1 ${category ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+            >
+              <FolderOpen className="h-3 w-3" />
+              {category ? category : 'Category'}
+              {category && (
+                <span
+                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCategory('');
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+            </Badge>
+            {expandedFields.category && (
+              <SimpleAutocomplete
+                value={category}
+                options={categoryNames}
+                onSelect={(value) => {
+                  setCategory(value);
+                  toggleField('category');
+                }}
+                onClose={() => toggleField('category')}
+                onCreateNew={handleCreateCategory}
+                placeholder="Search categories..."
+                icon={FolderOpen}
+                renderOption={({ option, onSelect }) => {
+                  const cat = categoryByName.get(option);
+                  const IconComp = cat?.icon ? getIcon(cat.icon) : null;
+                  const iconStyle = cat?.color ? { color: cat.color } : undefined;
+                  return (
+                    <div
+                      key={option}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2"
+                      onClick={() => onSelect(option)}
+                    >
+                      {IconComp && <IconComp className="h-3 w-3" style={iconStyle} />}
+                      <span>{option}</span>
+                    </div>
+                  );
+                }}
+              />
             )}
           </div>
-        )}
-      </div>
+
+          {/* Related To field */}
+          <div className="relative">
+            <Badge 
+              variant="interactive"
+              onClick={() => toggleField('relatedTo')}
+              className={`gap-1 ${relatedTo ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
+            >
+              <Tag className="h-3 w-3" />
+              {relatedTo ? relatedTo : 'Related To'}
+              {relatedTo && (
+                <span
+                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRelatedTo('');
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+            </Badge>
+            {expandedFields.relatedTo && (
+              <SimpleAutocomplete
+                value={relatedTo}
+                options={activeRelatedToValues}
+                onSelect={(value) => {
+                  setRelatedTo(value);
+                  toggleField('relatedTo');
+                }}
+                onClose={() => toggleField('relatedTo')}
+                onCreateNew={(value) => value}
+                placeholder="Type or select..."
+                icon={Tag}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </form>
   );
 }

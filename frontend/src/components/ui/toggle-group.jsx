@@ -22,7 +22,7 @@ const ToggleGroupItem = React.forwardRef(
         "first:rounded-l-md last:rounded-r-md",
         "-ml-px first:ml-0",
         active
-          ? "bg-primary text-primary-foreground border-primary"
+          ? "bg-gray-200 text-gray-900 border-gray-300"
           : "bg-background text-foreground hover:bg-accent hover:text-accent-foreground",
         className
       )}

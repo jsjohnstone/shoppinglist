@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   DndContext,
@@ -141,6 +141,8 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const showTagRow = item.isProcessing || (!item.isCompleted && (item.categoryName || item.relatedTo || item.wasScanned));
 
   const handleSave = async () => {
     await onUpdate(item.id, {
@@ -291,53 +293,77 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center gap-3 p-3 border-b last:border-b-0 ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
+      className={`flex items-center gap-3 p-3 border-b last:border-b-0 transition-all duration-300 ease-in-out ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
     >
       <Checkbox
         checked={item.isCompleted}
         onCheckedChange={() => onToggleComplete(item.id)}
-        className="self-start mt-0.5"
+        className={`mt-0.5 ${item.isCompleted ? '' : 'self-start'}`}
         disabled={item.isProcessing}
       />
       <div className="flex-1 min-w-0">
-        <div className={`font-medium flex items-center gap-2 dark:text-gray-100 ${item.isCompleted ? 'line-through' : ''}`}>
+        <div
+          className={`font-medium flex items-center gap-2 ${
+            item.isCompleted
+              ? 'text-gray-400 dark:text-gray-500 line-through'
+              : 'text-gray-900 dark:text-gray-100'
+          }`}
+        >
           {item.isProcessing && (
             <Loader2 className="h-4 w-4 animate-spin text-blue-500 dark:text-blue-400" />
           )}
           {item.name}
           {item.quantity && (
-            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+            <span
+              className={`ml-2 text-sm flex items-center gap-1 ${
+                item.isCompleted
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
               <Scale className="h-3 w-3" />
               {item.quantity}
             </span>
           )}
         </div>
-        {item.notes && <div className="text-sm text-gray-600 dark:text-gray-400">{item.notes}</div>}
-        <div className="flex gap-2 mt-1">
-          {item.isProcessing && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded flex items-center gap-1">
-              Processing...
-            </span>
-          )}
-          {item.categoryName && (
-            <CategoryBadge 
-              name={item.categoryName}
-              icon={item.categoryIcon}
-              color={item.categoryColor}
-            />
-          )}
-          {item.relatedTo && (
-            <span className="text-xs px-2 py-0.5 rounded bg-transparent border border-gray-400 text-gray-700 dark:text-gray-300 dark:border-gray-500 flex items-center gap-1">
-              <Tag className="h-3 w-3" />
-              {item.relatedTo}
-            </span>
-          )}
-          {item.wasScanned && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
-              <Barcode className="h-3 w-3" />
-            </span>
-          )}
-        </div>
+        {item.notes && (
+          <div
+            className={`text-sm ${
+              item.isCompleted
+                ? 'text-gray-400 dark:text-gray-500'
+                : 'text-gray-600 dark:text-gray-400'
+            }`}
+          >
+            {item.notes}
+          </div>
+        )}
+        {showTagRow && (
+          <div className="flex gap-2 mt-1">
+            {item.isProcessing && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded flex items-center gap-1">
+                Processing...
+              </span>
+            )}
+            {!item.isCompleted && item.categoryName && (
+              <CategoryBadge 
+                name={item.categoryName}
+                icon={item.categoryIcon}
+                color={item.categoryColor}
+              />
+            )}
+            {!item.isCompleted && item.relatedTo && (
+              <span className="text-xs px-2 py-0.5 rounded bg-transparent border border-gray-400 text-gray-700 dark:text-gray-300 dark:border-gray-500 flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                {item.relatedTo}
+              </span>
+            )}
+            {!item.isCompleted && item.wasScanned && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
+                <Barcode className="h-3 w-3" />
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
         <Button
@@ -387,6 +413,35 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     })
   );
 
+  const sortItemsWithCompletion = useCallback((a, b) => {
+    // Incomplete items first
+    if (a.isCompleted !== b.isCompleted) {
+      return a.isCompleted ? 1 : -1;
+    }
+
+    // Then apply selected sort option
+    switch (sortBy) {
+      case 'newest':
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      case 'oldest':
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      case 'a-z':
+        return a.name.localeCompare(b.name);
+      case 'manual':
+        return (a.sortOrder || 0) - (b.sortOrder || 0);
+      default:
+        return 0;
+    }
+  }, [sortBy]);
+
+  const categorySortOrderMap = useMemo(() => {
+    const map = new Map();
+    categories.forEach((cat) => {
+      map.set(cat.name, cat.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    });
+    return map;
+  }, [categories]);
+
   // Update local items when props change
   useMemo(() => {
     setLocalItems(items);
@@ -416,20 +471,8 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   // Sort items
   const sortedItems = useMemo(() => {
     const sorted = [...searchedItems];
-    
-    switch (sortBy) {
-      case 'newest':
-        return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      case 'oldest':
-        return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-      case 'a-z':
-        return sorted.sort((a, b) => a.name.localeCompare(b.name));
-      case 'manual':
-        return sorted.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-      default:
-        return sorted;
-    }
-  }, [searchedItems, sortBy]);
+    return sorted.sort(sortItemsWithCompletion);
+  }, [searchedItems, sortItemsWithCompletion]);
 
   // Group items by category for category view
   const groupedByCategory = useMemo(() => {
@@ -454,37 +497,16 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
       }
     });
     
-    // Sort items within each category
+    // Sort items within each category (incomplete first, then by selected sort)
     Object.keys(groups).forEach(category => {
-      groups[category].items = groups[category].items.sort((a, b) => {
-        switch (sortBy) {
-          case 'newest':
-            return new Date(b.createdAt) - new Date(a.createdAt);
-          case 'oldest':
-            return new Date(a.createdAt) - new Date(b.createdAt);
-          case 'a-z':
-            return a.name.localeCompare(b.name);
-          case 'manual':
-            return (a.sortOrder || 0) - (b.sortOrder || 0);
-          default:
-            return 0;
-        }
-      });
+      groups[category].items = groups[category].items.sort(sortItemsWithCompletion);
     });
     
     return groups;
-  }, [sortedItems, viewMode, sortBy]);
+  }, [sortedItems, viewMode, sortItemsWithCompletion]);
 
-  // Separate active and completed items for list view
-  const activeItems = useMemo(() => {
-    if (viewMode !== 'list') return [];
-    return sortedItems.filter(item => !item.isCompleted);
-  }, [sortedItems, viewMode]);
-
-  const completedItems = useMemo(() => {
-    if (viewMode !== 'list') return [];
-    return sortedItems.filter(item => item.isCompleted);
-  }, [sortedItems, viewMode]);
+  // Separate active and completed items for list view is no longer needed;
+  // we render a single combined list ordered by completion + sort option.
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -639,10 +661,35 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
 
       {/* Render based on view mode */}
       {viewMode === 'list' ? (
-        <>
-          {activeItems.length > 0 && renderItemList(activeItems, `To Buy (${activeItems.length})`)}
-          {completedItems.length > 0 && renderItemList(completedItems, `Completed (${completedItems.length})`)}
-        </>
+        sortedItems.length > 0 && (
+          <Card>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={sortedItems.map(item => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div>
+                  {sortedItems.map(item => (
+                    <SortableItem
+                      key={item.id}
+                      item={item}
+                      onToggleComplete={onToggleComplete}
+                      onDelete={onDelete}
+                      onUpdate={onUpdate}
+                      loading={loading}
+                      categories={categories}
+                      items={items}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </Card>
+        )
       ) : (
         <>
           {Object.entries(groupedByCategory)
@@ -650,9 +697,16 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
               // Calculate incomplete count for each category
               const aIncomplete = aData.totalCount - aData.completedCount;
               const bIncomplete = bData.totalCount - bData.completedCount;
-              
-              // If both have incomplete items, or both are fully complete, sort alphabetically
+
+              // If both have incomplete items, or both are fully complete, sort by category sortOrder (then name)
               if ((aIncomplete > 0 && bIncomplete > 0) || (aIncomplete === 0 && bIncomplete === 0)) {
+                const aSortOrder = categorySortOrderMap.get(aName) ?? Number.MAX_SAFE_INTEGER;
+                const bSortOrder = categorySortOrderMap.get(bName) ?? Number.MAX_SAFE_INTEGER;
+
+                if (aSortOrder !== bSortOrder) {
+                  return aSortOrder - bSortOrder;
+                }
+
                 return aName.localeCompare(bName);
               }
               

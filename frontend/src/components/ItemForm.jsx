@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText } from 'lucide-react';
+import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText, Check } from 'lucide-react';
 import { api } from '@/lib/api';
+import { getIcon } from '../lib/icons';
 
 // Check if a string looks like a barcode (8-13 digits)
 function isBarcode(input) {
@@ -15,13 +16,29 @@ function isBarcode(input) {
 }
 
 // Simple autocomplete component
-function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, placeholder, icon: Icon }) {
+function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, placeholder, icon: Icon, renderOption }) {
   const [searchValue, setSearchValue] = useState('');
   const inputRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!onClose) return;
+
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
 
   const filteredOptions = useMemo(() => {
     if (!searchValue) return options;
@@ -44,7 +61,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
   };
 
   return (
-    <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
+    <div ref={containerRef} className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
       <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg">
         {/* Search input */}
         <div className="p-2 border-b dark:border-gray-600 flex items-center gap-2">
@@ -81,15 +98,19 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
         {/* Options list */}
         {(filteredOptions.length > 0 || showCreateOption) && (
           <div className="max-h-60 overflow-auto">
-            {filteredOptions.map((option) => (
-              <div
-                key={option}
-                className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200"
-                onClick={() => handleSelect(option)}
-              >
-                {option}
-              </div>
-            ))}
+            {filteredOptions.map((option) =>
+              renderOption ? (
+                renderOption({ option, onSelect: handleSelect })
+              ) : (
+                <div
+                  key={option}
+                  className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200"
+                  onClick={() => handleSelect(option)}
+                >
+                  {option}
+                </div>
+              )
+            )}
             {showCreateOption && (
               <div
                 className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-2"
@@ -115,7 +136,9 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
 export function ItemForm({ onAdd, loading }) {
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [quantityDraft, setQuantityDraft] = useState('');
   const [notes, setNotes] = useState('');
+  const [notesDraft, setNotesDraft] = useState('');
   const [relatedTo, setRelatedTo] = useState('');
   const [category, setCategory] = useState('');
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -141,6 +164,14 @@ export function ItemForm({ onAdd, loading }) {
   // Get category names
   const categoryNames = useMemo(() => {
     return categories.map(cat => cat.name);
+  }, [categories]);
+
+  const categoryByName = useMemo(() => {
+    const map = new Map();
+    categories.forEach((cat) => {
+      map.set(cat.name, cat);
+    });
+    return map;
   }, [categories]);
 
   // Get active related-to values
@@ -218,6 +249,24 @@ export function ItemForm({ onAdd, loading }) {
       ...prev,
       [field]: !prev[field]
     }));
+  };
+
+  const openQuantityEditor = () => {
+    setQuantityDraft(quantity || '');
+    setExpandedFields(prev => ({ ...prev, quantity: true }));
+  };
+
+  const closeQuantityEditor = () => {
+    setExpandedFields(prev => ({ ...prev, quantity: false }));
+  };
+
+  const openNotesEditor = () => {
+    setNotesDraft(notes || '');
+    setExpandedFields(prev => ({ ...prev, notes: true }));
+  };
+
+  const closeNotesEditor = () => {
+    setExpandedFields(prev => ({ ...prev, notes: false }));
   };
 
   // Create category mutation
@@ -454,39 +503,67 @@ export function ItemForm({ onAdd, loading }) {
       <div className="flex flex-wrap gap-2">
         {/* Quantity field - only show in single-add mode */}
         {!isMultiAdd && (
-          !expandedFields.quantity ? (
+          <div className="relative">
             <Badge 
               variant="interactive"
-              onClick={() => toggleField('quantity')}
+              onClick={openQuantityEditor}
               className={`gap-1 ${quantity ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
             >
               <Scale className="h-3 w-3" />
               {quantity ? quantity : 'Quantity'}
+              {quantity && (
+                <span
+                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setQuantity('');
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
             </Badge>
-          ) : (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Scale className="h-4 w-4 text-gray-500" />
-              <Input
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="Quantity (e.g., 2, 500g)"
-                disabled={loading}
-                className="flex-1 h-8 text-sm"
-                autoFocus
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  toggleField('quantity');
-                }}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          )
+            {expandedFields.quantity && (
+              <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
+                <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-gray-500" />
+                  <Input
+                    value={quantityDraft}
+                    onChange={(e) => setQuantityDraft(e.target.value)}
+                    placeholder="Quantity (e.g., 2, 500g)"
+                    disabled={loading}
+                    className="flex-1 h-8 text-sm"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setQuantity(quantityDraft);
+                      closeQuantityEditor();
+                    }}
+                  >
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setQuantity('');
+                      setQuantityDraft('');
+                      closeQuantityEditor();
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Category field */}
@@ -498,6 +575,17 @@ export function ItemForm({ onAdd, loading }) {
           >
             <FolderOpen className="h-3 w-3" />
             {category ? category : 'Category'}
+            {category && (
+              <span
+                className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCategory('');
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
           </Badge>
           {expandedFields.category && (
             <SimpleAutocomplete
@@ -511,6 +599,21 @@ export function ItemForm({ onAdd, loading }) {
               onCreateNew={handleCreateCategory}
               placeholder="Search categories..."
               icon={FolderOpen}
+              renderOption={({ option, onSelect }) => {
+                const cat = categoryByName.get(option);
+                const IconComp = cat?.icon ? getIcon(cat.icon) : null;
+                const iconStyle = cat?.color ? { color: cat.color } : undefined;
+                return (
+                  <div
+                    key={option}
+                    className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2"
+                    onClick={() => onSelect(option)}
+                  >
+                    {IconComp && <IconComp className="h-3 w-3" style={iconStyle} />}
+                    <span>{option}</span>
+                  </div>
+                );
+              }}
             />
           )}
         </div>
@@ -524,6 +627,17 @@ export function ItemForm({ onAdd, loading }) {
           >
             <Tag className="h-3 w-3" />
             {relatedTo ? relatedTo : 'Related To'}
+            {relatedTo && (
+              <span
+                className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRelatedTo('');
+                }}
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
           </Badge>
           {expandedFields.relatedTo && (
             <SimpleAutocomplete
@@ -543,39 +657,67 @@ export function ItemForm({ onAdd, loading }) {
 
         {/* Notes field - only show in single-add mode */}
         {!isMultiAdd && (
-          !expandedFields.notes ? (
+          <div className="relative">
             <Badge 
               variant="interactive"
-              onClick={() => toggleField('notes')}
+              onClick={openNotesEditor}
               className={`gap-1 ${notes ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-200' : ''}`}
             >
               <StickyNote className="h-3 w-3" />
               {notes ? `${notes.substring(0, 20)}${notes.length > 20 ? '...' : ''}` : 'Notes'}
+              {notes && (
+                <span
+                  className="ml-1 rounded-full hover:bg-yellow-100 dark:hover:bg-yellow-900/40 p-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNotes('');
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </span>
+              )}
             </Badge>
-          ) : (
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <StickyNote className="h-4 w-4 text-gray-500" />
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Additional notes..."
-                disabled={loading}
-                className="flex-1 h-8 text-sm"
-                autoFocus
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  toggleField('notes');
-                }}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          )
+            {expandedFields.notes && (
+              <div className="absolute top-full left-0 mt-1 z-50 min-w-[250px]">
+                <div className="bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg p-2 flex items-center gap-2">
+                  <StickyNote className="h-4 w-4 text-gray-500" />
+                  <Input
+                    value={notesDraft}
+                    onChange={(e) => setNotesDraft(e.target.value)}
+                    placeholder="Additional notes..."
+                    disabled={loading}
+                    className="flex-1 h-8 text-sm"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setNotes(notesDraft);
+                      closeNotesEditor();
+                    }}
+                  >
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setNotes('');
+                      setNotesDraft('');
+                      closeNotesEditor();
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </form>

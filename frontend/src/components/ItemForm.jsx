@@ -142,6 +142,7 @@ export function ItemForm({ onAdd, loading }) {
   const [relatedTo, setRelatedTo] = useState('');
   const [category, setCategory] = useState('');
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const nameInputRef = useRef(null);
   const [processingBarcode, setProcessingBarcode] = useState(false);
   const [barcodeDetected, setBarcodeDetected] = useState(false);
   const [isMultiAdd, setIsMultiAdd] = useState(false);
@@ -389,6 +390,9 @@ export function ItemForm({ onAdd, loading }) {
         relatedTo: false,
         category: false,
       });
+
+      // Return focus to the main add-item input
+      nameInputRef.current?.focus();
     }
   };
 
@@ -436,6 +440,7 @@ export function ItemForm({ onAdd, loading }) {
             <div className="flex-1 relative">
               <div className="relative">
                 <Input
+                  ref={nameInputRef}
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);

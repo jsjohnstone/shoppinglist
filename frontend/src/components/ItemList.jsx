@@ -22,7 +22,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyNote, Tag, ChevronRight, ChevronDown, Barcode, Edit2, Save, X } from 'lucide-react';
+import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyNote, Tag, ChevronRight, ChevronDown, ChevronUp, Barcode, Edit2, Save, X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CategoryBadge } from './CategoryBadge';
@@ -91,7 +91,7 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
   );
 }
 
-function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, categories, items }) {
+function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, categories, items, isCategoryView = false, isFaded = false }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({
     name: item.name,
@@ -142,7 +142,13 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const showTagRow = item.isProcessing || (!item.isCompleted && (item.categoryName || item.relatedTo || item.wasScanned));
+  const showCategoryBadge = !isCategoryView && !item.isCompleted && item.categoryName;
+  const showRelatedTag = !isCategoryView && !item.isCompleted && item.relatedTo;
+  const showScannedTag = !item.isCompleted && item.wasScanned;
+
+  const showTagRow = item.isProcessing || showCategoryBadge || showRelatedTag || showScannedTag;
+  const showNotesRow = !!item.notes || (isCategoryView && !item.isCompleted && item.relatedTo);
+  const hasBelowContent = showTagRow || showNotesRow;
 
   const handleSave = async () => {
     await onUpdate(item.id, {
@@ -293,15 +299,15 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center gap-3 p-3 border-b last:border-b-0 transition-all duration-300 ease-in-out ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
+      className={`flex items-center gap-3 p-3 border-b last:border-b-0 transition-all duration-300 ease-in-out ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isFaded ? 'opacity-40' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
     >
       <Checkbox
         checked={item.isCompleted}
         onCheckedChange={() => onToggleComplete(item.id)}
-        className={`mt-0.5 ${item.isCompleted ? '' : 'self-start'}`}
+        className={`mt-0.5 ${hasBelowContent ? 'self-start' : ''}`}
         disabled={item.isProcessing}
       />
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative">
         <div
           className={`font-medium flex items-center gap-2 ${
             item.isCompleted
@@ -326,15 +332,21 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
             </span>
           )}
         </div>
-        {item.notes && (
+        {showNotesRow && (
           <div
-            className={`text-sm ${
+            className={`mt-1 flex items-center gap-2 text-sm ${
               item.isCompleted
                 ? 'text-gray-400 dark:text-gray-500'
                 : 'text-gray-600 dark:text-gray-400'
             }`}
           >
-            {item.notes}
+            {isCategoryView && !item.isCompleted && item.relatedTo && (
+              <span className="text-xs px-2 py-0.5 rounded bg-transparent border border-gray-400 text-gray-700 dark:text-gray-300 dark:border-gray-500 flex items-center gap-1">
+                <Tag className="h-3 w-3" />
+                {item.relatedTo}
+              </span>
+            )}
+            {item.notes && <span className="truncate">{item.notes}</span>}
           </div>
         )}
         {showTagRow && (
@@ -344,25 +356,28 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
                 Processing...
               </span>
             )}
-            {!item.isCompleted && item.categoryName && (
+            {showCategoryBadge && (
               <CategoryBadge 
                 name={item.categoryName}
                 icon={item.categoryIcon}
                 color={item.categoryColor}
               />
             )}
-            {!item.isCompleted && item.relatedTo && (
+            {showRelatedTag && (
               <span className="text-xs px-2 py-0.5 rounded bg-transparent border border-gray-400 text-gray-700 dark:text-gray-300 dark:border-gray-500 flex items-center gap-1">
                 <Tag className="h-3 w-3" />
                 {item.relatedTo}
               </span>
             )}
-            {!item.isCompleted && item.wasScanned && (
+            {showScannedTag && (
               <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded flex items-center gap-1">
                 <Barcode className="h-3 w-3" />
               </span>
             )}
           </div>
+        )}
+        {isFaded && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-b from-transparent to-white" />
         )}
       </div>
       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -399,6 +414,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   const [searchQuery, setSearchQuery] = useState('');
   const [localItems, setLocalItems] = useState(items);
   const [collapsedCategories, setCollapsedCategories] = useState(new Set());
+  const [expandedCompletedCategories, setExpandedCompletedCategories] = useState(new Set());
   const queryClient = useQueryClient();
 
   const sensors = useSensors(
@@ -414,7 +430,12 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
   );
 
   const sortItemsWithCompletion = useCallback((a, b) => {
-    // Incomplete items first
+    // Processing items first
+    if (a.isProcessing !== b.isProcessing) {
+      return a.isProcessing ? -1 : 1;
+    }
+
+    // Incomplete items next
     if (a.isCompleted !== b.isCompleted) {
       return a.isCompleted ? 1 : -1;
     }
@@ -480,6 +501,9 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     
     const groups = {};
     sortedItems.forEach(item => {
+      // Processing uncategorised items are handled separately at the top of category view
+      if (item.isProcessing && !item.categoryName) return;
+
       const category = item.categoryName || 'Uncategorized';
       if (!groups[category]) {
         groups[category] = {
@@ -497,7 +521,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
       }
     });
     
-    // Sort items within each category (incomplete first, then by selected sort)
+    // Sort items within each category (processing first, then incomplete, then by selected sort)
     Object.keys(groups).forEach(category => {
       groups[category].items = groups[category].items.sort(sortItemsWithCompletion);
     });
@@ -543,6 +567,22 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     });
   };
 
+  const expandCompletedCategory = (category) => {
+    setExpandedCompletedCategories(prev => {
+      const newSet = new Set(prev);
+      newSet.add(category);
+      return newSet;
+    });
+  };
+
+  const collapseCompletedCategory = (category) => {
+    setExpandedCompletedCategories(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(category);
+      return newSet;
+    });
+  };
+
   if (items.length === 0) {
     return (
       <Card className="p-8 text-center text-gray-500">
@@ -551,46 +591,75 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
     );
   }
 
+  const processingUncategorised = useMemo(() => {
+    if (viewMode !== 'category') return [];
+    return sortedItems.filter(item => item.isProcessing && !item.categoryName);
+  }, [viewMode, sortedItems]);
+
   const renderItemList = (itemsToRender, title, categoryName = null, categoryIcon = null, categoryColor = null, completedCount = null, totalCount = null) => {
     const isCollapsed = categoryName && collapsedCategories.has(categoryName);
     const Icon = categoryIcon ? getIcon(categoryIcon) : null;
     const showCounts = completedCount !== null && totalCount !== null;
+    const isCategoryView = !!categoryName;
+
+    let itemsForDisplay = itemsToRender;
+    let fadedCompletedId = null;
+    let hiddenCompletedCount = 0;
+    let completedItems = [];
+
+    if (isCategoryView) {
+      const activeItems = itemsToRender.filter(item => !item.isCompleted);
+      completedItems = itemsToRender.filter(item => item.isCompleted);
+      const isExpanded = expandedCompletedCategories.has(categoryName);
+
+      let visibleCompleted = completedItems;
+      if (completedItems.length > 2 && !isExpanded) {
+        visibleCompleted = completedItems.slice(0, 3);
+        fadedCompletedId = visibleCompleted[2].id;
+        hiddenCompletedCount = completedItems.length - 3;
+      }
+
+      itemsForDisplay = [...activeItems, ...visibleCompleted];
+    }
     
     return (
       <Card key={title}>
-        <div 
-          className="p-4 border-b dark:border-gray-700 flex items-center justify-between cursor-pointer"
-          style={categoryColor ? {
-            backgroundColor: `${categoryColor}20`,
-            borderBottomColor: categoryColor,
-          } : {}}
-          onClick={() => categoryName && toggleCategory(categoryName)}
-        >
-          <h2 className="font-semibold flex items-center gap-2" style={categoryColor ? { color: categoryColor } : {}}>
-            {categoryName && (
-              isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
-            )}
-            {Icon && <Icon className="h-5 w-5" />}
-            {title}
-            {showCounts && (
-              <span className="ml-2 text-sm font-normal text-gray-600 dark:text-gray-400">
-                {completedCount}/{totalCount}
-              </span>
-            )}
-          </h2>
-        </div>
+        {categoryName && (
+          <div 
+            className="p-4 border-b dark:border-gray-700 flex items-center justify-between cursor-pointer"
+            style={categoryColor ? {
+              backgroundColor: `${categoryColor}20`,
+              borderBottomColor: categoryColor,
+            } : {}}
+            onClick={() => categoryName && toggleCategory(categoryName)}
+          >
+            <h2 className="font-semibold flex items-center gap-2" style={categoryColor ? { color: categoryColor } : {}}>
+              {categoryName && (
+                isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+              )}
+              {Icon && <Icon className="h-5 w-5" />}
+              {title}
+              {showCounts && (
+                <span className="ml-2 text-sm font-normal text-gray-600 dark:text-gray-400">
+                  {completedCount}/{totalCount}
+                </span>
+              )}
+            </h2>
+          </div>
+        )}
         {!isCollapsed && (
+
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={itemsToRender.map(item => item.id)}
+              items={itemsForDisplay.map(item => item.id)}
               strategy={verticalListSortingStrategy}
             >
               <div>
-                {itemsToRender.map(item => (
+                {itemsForDisplay.map(item => (
                   <SortableItem
                     key={item.id}
                     item={item}
@@ -600,8 +669,34 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
                     loading={loading}
                     categories={categories}
                     items={items}
+                    isCategoryView={isCategoryView}
+                    isFaded={item.id === fadedCompletedId}
                   />
                 ))}
+                {isCategoryView && completedItems.length > 3 && (
+                  <div className="flex justify-center py-2">
+                    {hiddenCompletedCount > 0 ? (
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 flex items-center gap-1 hover:text-gray-700"
+                        onClick={() => expandCompletedCategory(categoryName)}
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                        <span>Show {hiddenCompletedCount} more completed</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 flex items-center gap-1 hover:text-gray-700"
+                        onClick={() => collapseCompletedCategory(categoryName)}
+                      >
+                        <ChevronUp className="h-3 w-3" />
+                        <span>Hide completed items</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
               </div>
             </SortableContext>
           </DndContext>
@@ -692,7 +787,11 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
         )
       ) : (
         <>
-          {Object.entries(groupedByCategory)
+          {/* Uncategorised processing items at the very top, outside any category */}
+          {processingUncategorised.length > 0 &&
+            renderItemList(processingUncategorised, 'Processing')}
+
+          {Object.entries(groupedByCategory || {})
             .sort(([aName, aData], [bName, bData]) => {
               // Calculate incomplete count for each category
               const aIncomplete = aData.totalCount - aData.completedCount;

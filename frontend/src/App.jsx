@@ -427,10 +427,6 @@ function ShoppingListApp() {
           
           {/* Right side */}
           <div className="flex items-center gap-2 md:gap-4">
-            {/* Welcome message - hidden on mobile */}
-            <span className="hidden md:inline text-sm text-gray-600 dark:text-gray-300">
-              Hello, {user.username}!
-            </span>
             
             {/* Settings button */}
             <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>

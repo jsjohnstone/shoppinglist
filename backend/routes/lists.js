@@ -21,7 +21,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, icon } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'List name is required' });
@@ -33,7 +33,7 @@ router.post('/', authenticateToken, async (req, res) => {
     const nextOrder = (maxOrder[0]?.max || 0) + 1;
 
     const [newList] = await db.insert(lists)
-      .values({ name: name.trim(), sortOrder: nextOrder })
+      .values({ name: name.trim(), icon: icon || null, sortOrder: nextOrder })
       .returning();
 
     res.status(201).json(newList);
@@ -46,14 +46,17 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, icon } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'List name is required' });
     }
 
+    const updateData = { name: name.trim() };
+    if (icon !== undefined) updateData.icon = icon || null;
+
     const [updated] = await db.update(lists)
-      .set({ name: name.trim() })
+      .set(updateData)
       .where(eq(lists.id, parseInt(id)))
       .returning();
 

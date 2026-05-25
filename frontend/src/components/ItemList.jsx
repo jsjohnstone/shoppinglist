@@ -816,7 +816,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
         </ToggleGroup>
 
         {/* Sort dropdown */}
-        <div className="min-w-[150px]">
+        <div className="min-w-[120px]">
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger>
               <SelectValue placeholder="Sort by" />
@@ -829,6 +829,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
             </SelectContent>
           </Select>
         </div>
+
       </div>
 
       {/* Render based on view mode */}

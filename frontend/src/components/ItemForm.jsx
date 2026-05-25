@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText, Check, List } from 'lucide-react';
+import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText, Check, ChevronDown } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getIcon } from '../lib/icons';
 
@@ -136,6 +136,8 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
 export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
   const [name, setName] = useState('');
   const [targetListId, setTargetListId] = useState(null);
+  const [showListDropdown, setShowListDropdown] = useState(false);
+  const listDropdownRef = useRef(null);
   const [isNameActive, setIsNameActive] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [quantityDraft, setQuantityDraft] = useState('');
@@ -186,6 +188,17 @@ export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
       .map(item => item.relatedTo);
     return [...new Set(values)]; // Unique values only
   }, [items]);
+
+  useEffect(() => {
+    if (!showListDropdown) return;
+    const handleClick = (e) => {
+      if (listDropdownRef.current && !listDropdownRef.current.contains(e.target)) {
+        setShowListDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showListDropdown]);
 
   // Barcode detection and lookup
   useEffect(() => {
@@ -454,7 +467,7 @@ export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
                     placeholder="Add an item or scan barcode..."
                     required
                     disabled={loading}
-                    className="flex-1 pr-10"
+                    className={`flex-1 ${lists.length > 1 ? 'pr-16' : 'pr-10'}`}
                   />
                   {barcodeDetected ? (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -464,13 +477,45 @@ export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
                       )}
                     </div>
                   ) : (
-                    <button
-                      type="submit"
-                      disabled={loading || !name}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 inline-flex items-center justify-center rounded-md bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex" ref={listDropdownRef}>
+                      <button
+                        type="submit"
+                        disabled={loading || !name}
+                        className={`h-7 inline-flex items-center justify-center bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50 ${lists.length > 1 ? 'rounded-l-md pl-2 pr-1.5' : 'rounded-md w-7'}`}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                      {lists.length > 1 && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowListDropdown(!showListDropdown)}
+                            className="h-7 px-1 inline-flex items-center justify-center bg-blue-500 text-white hover:bg-blue-400 rounded-r-md border-l border-blue-400"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                          {showListDropdown && (
+                            <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg py-1 min-w-[140px]">
+                              {lists.map(list => (
+                                <div
+                                  key={list.id}
+                                  className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2 ${
+                                    (targetListId || selectedListId) === list.id ? 'bg-blue-50 dark:bg-blue-900/20 font-medium' : ''
+                                  }`}
+                                  onClick={() => {
+                                    setTargetListId(list.id === selectedListId ? null : list.id);
+                                    setShowListDropdown(false);
+                                  }}
+                                >
+                                  {list.icon && <img src={list.icon} alt="" className="w-4 h-4 rounded object-cover" />}
+                                  {list.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
                 {/* Quick Add Autocomplete - only show if not a barcode */}
@@ -663,47 +708,6 @@ export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
               />
             )}
           </div>
-
-          {/* List picker - only show when multiple lists exist */}
-          {lists.length > 1 && (
-            <div className="relative">
-              <Badge
-                variant="interactive"
-                onClick={() => toggleField('list')}
-                className={`gap-1 ${targetListId ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-900 dark:text-purple-200' : ''}`}
-              >
-                <List className="h-3 w-3" />
-                {targetListId
-                  ? lists.find(l => l.id === targetListId)?.name || 'List'
-                  : lists.find(l => l.id === selectedListId)?.name || 'List'}
-                {targetListId && (
-                  <span
-                    className="ml-1 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/40 p-0.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setTargetListId(null);
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </span>
-                )}
-              </Badge>
-              {expandedFields.list && (
-                <SimpleAutocomplete
-                  value={targetListId ? lists.find(l => l.id === targetListId)?.name : ''}
-                  options={lists.map(l => l.name)}
-                  onSelect={(value) => {
-                    const list = lists.find(l => l.name === value);
-                    if (list) setTargetListId(list.id === selectedListId ? null : list.id);
-                    toggleField('list');
-                  }}
-                  onClose={() => toggleField('list')}
-                  placeholder="Select list..."
-                  icon={List}
-                />
-              )}
-            </div>
-          )}
 
           {/* Notes field - only show in single-add mode */}
           {!isMultiAdd && (

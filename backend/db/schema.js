@@ -17,6 +17,7 @@ export const apiKeys = pgTable('api_keys', {
 export const lists = pgTable('lists', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+  icon: text('icon'),
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
 });

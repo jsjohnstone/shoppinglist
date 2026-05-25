@@ -2,12 +2,13 @@
 CREATE TABLE IF NOT EXISTS lists (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  icon TEXT,
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Insert default list
-INSERT INTO lists (id, name, sort_order) VALUES (1, 'Shopping List', 0)
+INSERT INTO lists (id, name, sort_order) VALUES (1, 'Groceries', 0)
 ON CONFLICT DO NOTHING;
 
 -- Ensure the sequence is past id=1

@@ -24,8 +24,10 @@ export function Settings({ onClose }) {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [newListName, setNewListName] = useState('');
+  const [newListIcon, setNewListIcon] = useState(null);
   const [editingListId, setEditingListId] = useState(null);
   const [editingListName, setEditingListName] = useState('');
+  const [editingListIcon, setEditingListIcon] = useState(null);
   const queryClient = useQueryClient();
 
   // API Keys queries
@@ -824,7 +826,26 @@ export function Settings({ onClose }) {
                 Create and manage shopping lists. Items can be moved between lists.
               </p>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <label className="relative cursor-pointer w-10 h-10 rounded-md border dark:border-gray-600 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 flex-shrink-0">
+                  {newListIcon ? (
+                    <img src={newListIcon} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Plus className="h-4 w-4 text-gray-400" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => setNewListIcon(ev.target.result);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
                 <Input
                   value={newListName}
                   onChange={(e) => setNewListName(e.target.value)}
@@ -833,14 +854,18 @@ export function Settings({ onClose }) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newListName.trim()) {
                       e.preventDefault();
-                      createListMutation.mutate({ name: newListName.trim() });
+                      createListMutation.mutate({ name: newListName.trim(), icon: newListIcon });
+                      setNewListName('');
+                      setNewListIcon(null);
                     }
                   }}
                 />
                 <Button
                   onClick={() => {
                     if (newListName.trim()) {
-                      createListMutation.mutate({ name: newListName.trim() });
+                      createListMutation.mutate({ name: newListName.trim(), icon: newListIcon });
+                      setNewListName('');
+                      setNewListIcon(null);
                     }
                   }}
                   disabled={!newListName.trim() || createListMutation.isPending}
@@ -863,6 +888,25 @@ export function Settings({ onClose }) {
                       <div className="flex items-center justify-between gap-4">
                         {editingListId === list.id ? (
                           <div className="flex items-center gap-2 flex-1">
+                            <label className="relative cursor-pointer w-8 h-8 rounded-md border dark:border-gray-600 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 flex-shrink-0">
+                              {editingListIcon ? (
+                                <img src={editingListIcon} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Plus className="h-3 w-3 text-gray-400" />
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => setEditingListIcon(ev.target.result);
+                                  reader.readAsDataURL(file);
+                                }}
+                              />
+                            </label>
                             <Input
                               value={editingListName}
                               onChange={(e) => setEditingListName(e.target.value)}
@@ -870,7 +914,7 @@ export function Settings({ onClose }) {
                               autoFocus
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && editingListName.trim()) {
-                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim() } });
+                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim(), icon: editingListIcon } });
                                 } else if (e.key === 'Escape') {
                                   setEditingListId(null);
                                 }
@@ -881,7 +925,7 @@ export function Settings({ onClose }) {
                               size="icon"
                               onClick={() => {
                                 if (editingListName.trim()) {
-                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim() } });
+                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim(), icon: editingListIcon } });
                                 }
                               }}
                             >
@@ -897,7 +941,10 @@ export function Settings({ onClose }) {
                           </div>
                         ) : (
                           <>
-                            <span className="font-medium dark:text-white">{list.name}</span>
+                            <span className="font-medium dark:text-white flex items-center gap-2">
+                              {list.icon && <img src={list.icon} alt="" className="w-6 h-6 rounded object-cover" />}
+                              {list.name}
+                            </span>
                             <div className="flex gap-2">
                               <Button
                                 variant="ghost"
@@ -905,6 +952,7 @@ export function Settings({ onClose }) {
                                 onClick={() => {
                                   setEditingListId(list.id);
                                   setEditingListName(list.name);
+                                  setEditingListIcon(list.icon || null);
                                 }}
                               >
                                 <Edit className="h-4 w-4" />

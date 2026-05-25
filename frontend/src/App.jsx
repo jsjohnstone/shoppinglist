@@ -381,7 +381,11 @@ function ShoppingListApp() {
         <div className="max-w-4xl mx-auto md:px-6 px-5 md:pt-6 md:pb-5 pt-4 pb-3 flex items-center justify-between">
           {/* Left side */}
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-6 w-6 text-gray-900 dark:text-white" />
+            {selectedList?.icon ? (
+              <img src={selectedList.icon} alt="" className="h-6 w-6 rounded object-cover" />
+            ) : (
+              <ShoppingCart className="h-6 w-6 text-gray-900 dark:text-white" />
+            )}
             {allLists.length > 1 ? (
               <Select value={String(selectedListId)} onValueChange={(v) => setSelectedListId(parseInt(v))}>
                 <SelectTrigger className="border-none shadow-none text-xl md:text-2xl font-bold p-0 h-auto bg-transparent focus:ring-0 w-auto gap-2">
@@ -389,13 +393,18 @@ function ShoppingListApp() {
                 </SelectTrigger>
                 <SelectContent>
                   {allLists.map(list => (
-                    <SelectItem key={list.id} value={String(list.id)}>{list.name}</SelectItem>
+                    <SelectItem key={list.id} value={String(list.id)}>
+                      <span className="flex items-center gap-2">
+                        {list.icon && <img src={list.icon} alt="" className="w-5 h-5 rounded object-cover" />}
+                        {list.name}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
               <h1 className="text-xl md:text-2xl font-bold dark:text-white">
-                {selectedList?.name || 'Shopping List'}
+                {selectedList?.name || 'Groceries'}
               </h1>
             )}
           </div>

@@ -538,7 +538,7 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
   }, [categories]);
 
   // Update local items when props change
-  useMemo(() => {
+  useEffect(() => {
     setLocalItems(items);
   }, [items]);
 

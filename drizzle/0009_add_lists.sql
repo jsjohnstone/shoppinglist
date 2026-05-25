@@ -2,7 +2,6 @@
 CREATE TABLE IF NOT EXISTS lists (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  icon TEXT,
   sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW()
 );

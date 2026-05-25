@@ -13,6 +13,28 @@ import { DeviceEvents } from './DeviceEvents';
 import { CategoryDialog } from './CategoryDialog';
 import { CategoryBadge } from './CategoryBadge';
 
+function resizeImage(file, maxSize = 128) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = maxSize;
+        canvas.height = maxSize;
+        const ctx = canvas.getContext('2d');
+        const scale = Math.max(maxSize / img.width, maxSize / img.height);
+        const x = (maxSize - img.width * scale) / 2;
+        const y = (maxSize - img.height * scale) / 2;
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+        resolve(canvas.toDataURL('image/webp', 0.8));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export function Settings({ onClose }) {
   const [activeTab, setActiveTab] = useState('api-keys');
   const [newKeyName, setNewKeyName] = useState('');
@@ -837,12 +859,11 @@ export function Settings({ onClose }) {
                     type="file"
                     accept="image/*"
                     className="absolute inset-0 opacity-0 cursor-pointer"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => setNewListIcon(ev.target.result);
-                      reader.readAsDataURL(file);
+                      const dataUrl = await resizeImage(file);
+                      setNewListIcon(dataUrl);
                     }}
                   />
                 </label>
@@ -898,12 +919,11 @@ export function Settings({ onClose }) {
                                 type="file"
                                 accept="image/*"
                                 className="absolute inset-0 opacity-0 cursor-pointer"
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   const file = e.target.files?.[0];
                                   if (!file) return;
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => setEditingListIcon(ev.target.result);
-                                  reader.readAsDataURL(file);
+                                  const dataUrl = await resizeImage(file);
+                                  setEditingListIcon(dataUrl);
                                 }}
                               />
                             </label>

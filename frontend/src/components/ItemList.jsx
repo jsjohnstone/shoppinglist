@@ -486,9 +486,11 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
   const [viewMode, setViewMode] = useState('list');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
-  const [localItems, setLocalItems] = useState(items);
+  const [reorderedItems, setReorderedItems] = useState(null);
   const [collapsedCategories, setCollapsedCategories] = useState(new Set());
   const [expandedCompletedCategories, setExpandedCompletedCategories] = useState(new Set());
+
+  const displayItems = reorderedItems || items;
   const queryClient = useQueryClient();
 
   const sensors = useSensors(
@@ -537,9 +539,9 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
     return map;
   }, [categories]);
 
-  // Update local items when props change
+  // Clear reorder override when props update
   useEffect(() => {
-    setLocalItems(items);
+    setReorderedItems(null);
   }, [items]);
 
   // Reorder mutation
@@ -552,16 +554,16 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
 
   // Filter items by search query
   const searchedItems = useMemo(() => {
-    if (!searchQuery.trim()) return localItems;
-    
+    if (!searchQuery.trim()) return displayItems;
+
     const query = searchQuery.toLowerCase();
-    return localItems.filter(item => 
+    return displayItems.filter(item =>
       item.name.toLowerCase().includes(query) ||
       item.categoryName?.toLowerCase().includes(query) ||
       item.notes?.toLowerCase().includes(query) ||
       item.relatedTo?.toLowerCase().includes(query)
     );
-  }, [localItems, searchQuery]);
+  }, [displayItems, searchQuery]);
 
   // Sort items
   const sortedItems = useMemo(() => {
@@ -610,22 +612,18 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveIt
     const { active, over } = event;
 
     if (active.id !== over.id) {
-      setLocalItems((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        
-        const newItems = arrayMove(items, oldIndex, newIndex);
-        
-        // Update sort orders and send to backend
-        const itemOrders = newItems.map((item, index) => ({
-          id: item.id,
-          sortOrder: index,
-        }));
-        
-        reorderMutation.mutate(itemOrders);
-        
-        return newItems;
-      });
+      const currentItems = reorderedItems || items;
+      const oldIndex = currentItems.findIndex((item) => item.id === active.id);
+      const newIndex = currentItems.findIndex((item) => item.id === over.id);
+
+      const newItems = arrayMove(currentItems, oldIndex, newIndex);
+      setReorderedItems(newItems);
+
+      const itemOrders = newItems.map((item, index) => ({
+        id: item.id,
+        sortOrder: index,
+      }));
+      reorderMutation.mutate(itemOrders);
     }
   };
 

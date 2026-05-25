@@ -1,6 +1,6 @@
 import express from 'express';
 import { db } from '../db/index.js';
-import { items, categories } from '../db/schema.js';
+import { items, categories, lists } from '../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
 import { authenticateApiKey } from '../middleware/apiKey.js';
@@ -44,23 +44,28 @@ function broadcastToAll(event) {
   // SSE endpoint for real-time updates
   // Supports both header auth (JWT in Authorization header) and query param auth (for EventSource)
   router.get('/events', async (req, res) => {
-    // EventSource doesn't support custom headers, so we accept token via query param
-    const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      logger.warn('SSE connection rejected - no token');
-      return res.status(401).json({ error: 'No authentication token provided' });
-    }
-
-    // Verify token
     let user;
-    try {
-      const jwt = await import('jsonwebtoken');
-      const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      user = decoded;
-    } catch (error) {
-      logger.warn('SSE connection rejected - invalid token');
-      return res.status(401).json({ error: 'Invalid authentication token' });
+
+    if (process.env.DISABLE_AUTH === 'true') {
+      user = { id: 1, username: 'default' };
+    } else {
+      // EventSource doesn't support custom headers, so we accept token via query param
+      const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+
+      if (!token) {
+        logger.warn('SSE connection rejected - no token');
+        return res.status(401).json({ error: 'No authentication token provided' });
+      }
+
+      // Verify token
+      try {
+        const jwt = await import('jsonwebtoken');
+        const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        user = decoded;
+      } catch (error) {
+        logger.warn('SSE connection rejected - invalid token');
+        return res.status(401).json({ error: 'Invalid authentication token' });
+      }
     }
 
   // Set SSE headers
@@ -127,7 +132,7 @@ async function findOrCreateCategory(categoryName) {
 // Get all items (supports filtering)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { status, relatedTo } = req.query;
+    const { status, relatedTo, listId } = req.query;
 
     let query = db.select({
       id: items.id,
@@ -145,6 +150,7 @@ router.get('/', authenticateToken, async (req, res) => {
       wasScanned: items.wasScanned,
       completedAt: items.completedAt,
       sortOrder: items.sortOrder,
+      listId: items.listId,
       createdAt: items.createdAt,
       updatedAt: items.updatedAt,
     })
@@ -152,16 +158,26 @@ router.get('/', authenticateToken, async (req, res) => {
     .leftJoin(categories, eq(items.categoryId, categories.id))
     .orderBy(items.isCompleted, items.sortOrder, desc(items.createdAt));
 
+    const conditions = [];
+
+    if (listId) {
+      conditions.push(eq(items.listId, parseInt(listId)));
+    }
+
     // Filter by completion status
     if (status === 'active') {
-      query = query.where(eq(items.isCompleted, false));
+      conditions.push(eq(items.isCompleted, false));
     } else if (status === 'completed') {
-      query = query.where(eq(items.isCompleted, true));
+      conditions.push(eq(items.isCompleted, true));
     }
 
     // Filter by relatedTo
     if (relatedTo) {
-      query = query.where(eq(items.relatedTo, relatedTo));
+      conditions.push(eq(items.relatedTo, relatedTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
     }
 
     const allItems = await query;
@@ -176,7 +192,7 @@ router.get('/', authenticateToken, async (req, res) => {
   // Bulk add items (with async LLM processing for each item)
   router.post('/bulk-add', authenticateToken, async (req, res) => {
     try {
-      const { items: itemTexts, relatedTo, categoryId } = req.body;
+      const { items: itemTexts, relatedTo, categoryId, listId } = req.body;
 
       logger.info('Bulk add items request', {
         userId: req.user.id,
@@ -216,6 +232,7 @@ router.get('/', authenticateToken, async (req, res) => {
           categoryId: categoryId || null,
           isProcessing: ollamaEnabled,
           addedBy: req.user.id,
+          listId: listId || 1,
         })
         .returning();
       
@@ -240,6 +257,7 @@ router.get('/', authenticateToken, async (req, res) => {
           barcode: items.barcode,
           wasScanned: items.wasScanned,
           completedAt: items.completedAt,
+          listId: items.listId,
           createdAt: items.createdAt,
           updatedAt: items.updatedAt,
         })
@@ -283,7 +301,7 @@ router.get('/', authenticateToken, async (req, res) => {
   // Add new item (with async LLM processing or barcode processing)
   router.post('/', authenticateToken, async (req, res) => {
     try {
-      const { name, quantity, notes, relatedTo, category, skipLlm } = req.body;
+      const { name, quantity, notes, relatedTo, category, skipLlm, listId } = req.body;
 
       if (!name) {
         return res.status(400).json({ error: 'Item name is required' });
@@ -291,12 +309,13 @@ router.get('/', authenticateToken, async (req, res) => {
 
       // Check if this is a barcode
       const isBarcodeInput = isBarcode(name);
-      
+
       logger.info('Adding item', {
         userId: req.user.id,
         itemName: name,
         isBarcode: isBarcodeInput,
-        category
+        category,
+        listId,
       });
 
     // Check if Ollama is enabled
@@ -315,6 +334,7 @@ router.get('/', authenticateToken, async (req, res) => {
         barcode: isBarcodeInput ? name.trim() : null,
         wasScanned: isBarcodeInput,
         addedBy: req.user.id,
+        listId: listId || 1,
       })
       .returning();
 
@@ -334,6 +354,7 @@ router.get('/', authenticateToken, async (req, res) => {
       barcode: items.barcode,
       wasScanned: items.wasScanned,
       completedAt: items.completedAt,
+      listId: items.listId,
       createdAt: items.createdAt,
       updatedAt: items.updatedAt,
     })
@@ -589,6 +610,7 @@ router.post('/barcode', authenticateDevice, async (req, res) => {
         barcode: items.barcode,
         wasScanned: items.wasScanned,
         completedAt: items.completedAt,
+        listId: items.listId,
         createdAt: items.createdAt,
         updatedAt: items.updatedAt,
       })
@@ -669,7 +691,7 @@ router.post('/barcode', authenticateDevice, async (req, res) => {
 // Add item via API key (for external apps like Home Assistant)
 router.post('/api-add', authenticateApiKey, async (req, res) => {
   try {
-    const { name, quantity, notes, relatedTo, category, skipLlm } = req.body;
+    const { name, quantity, notes, relatedTo, category, skipLlm, listId } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Item name is required' });
@@ -689,6 +711,7 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
         categoryId: category ? await findOrCreateCategory(category) : null,
         isProcessing: shouldProcess,
         addedBy: null, // External API, no user
+        listId: listId || 1,
       })
       .returning();
 
@@ -705,6 +728,7 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
       categoryColor: categories.color,
       isCompleted: items.isCompleted,
       isProcessing: items.isProcessing,
+      listId: items.listId,
       createdAt: items.createdAt,
       updatedAt: items.updatedAt,
     })
@@ -802,6 +826,7 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
       barcode: items.barcode,
       wasScanned: items.wasScanned,
       completedAt: items.completedAt,
+      listId: items.listId,
       createdAt: items.createdAt,
       updatedAt: items.updatedAt,
     })
@@ -964,6 +989,47 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
       res.status(500).json({ error: 'Failed to delete item' });
     }
   });
+
+// Move item to a different list
+router.put('/:id/move', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { listId } = req.body;
+
+    if (!listId) {
+      return res.status(400).json({ error: 'listId is required' });
+    }
+
+    const [list] = await db.select().from(lists).where(eq(lists.id, parseInt(listId))).limit(1);
+    if (!list) {
+      return res.status(404).json({ error: 'List not found' });
+    }
+
+    const [currentItem] = await db.select().from(items).where(eq(items.id, parseInt(id))).limit(1);
+    if (!currentItem) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const fromListId = currentItem.listId;
+
+    const [updated] = await db.update(items)
+      .set({ listId: parseInt(listId), updatedAt: new Date() })
+      .where(eq(items.id, parseInt(id)))
+      .returning();
+
+    broadcastToAll({
+      type: 'item_moved',
+      item: updated,
+      fromListId,
+      toListId: parseInt(listId),
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error moving item:', error);
+    res.status(500).json({ error: 'Failed to move item' });
+  }
+});
 
 // Reorder items
 router.post('/reorder', authenticateToken, async (req, res) => {

@@ -143,4 +143,9 @@ router.get('/me', authenticateToken, async (req, res) => {
   }
 });
 
+// Public config endpoint - tells frontend whether auth is required
+router.get('/config', (req, res) => {
+  res.json({ authRequired: process.env.DISABLE_AUTH !== 'true' });
+});
+
 export default router;

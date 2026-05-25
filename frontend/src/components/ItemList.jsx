@@ -22,7 +22,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyNote, Tag, ChevronRight, ChevronDown, ChevronUp, Barcode, Edit2, Save, X } from 'lucide-react';
+import { Trash2, Loader2, GripVertical, Search, List, FolderOpen, Scale, StickyNote, Tag, ChevronRight, ChevronDown, ChevronUp, Barcode, Edit2, Save, X, ArrowRightLeft } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { CategoryBadge } from './CategoryBadge';
@@ -91,8 +91,12 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
   );
 }
 
-function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, categories, items, isCategoryView = false, isFaded = false }) {
+function SortableItem({ item, onToggleComplete, onDelete, onUpdate, onMoveItem, loading, categories, items, lists = [], currentListId, isCategoryView = false, isFaded = false }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
+  const longPressTimer = useRef(null);
+  const contextMenuRef = useRef(null);
   const [editData, setEditData] = useState({
     name: item.name,
     quantity: item.quantity || '',
@@ -172,7 +176,35 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
     setIsEditing(false);
   };
 
-  // Handlers
+  const otherLists = lists.filter(l => l.id !== currentListId);
+
+  useEffect(() => {
+    if (!showContextMenu) return;
+    const handleClick = (e) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+        setShowContextMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('touchstart', handleClick);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('touchstart', handleClick);
+    };
+  }, [showContextMenu]);
+
+  const handleContextMenu = (e) => {
+    if (otherLists.length === 0 || isEditing) return;
+    e.preventDefault();
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  };
+
+  const handleMoveToList = (listId) => {
+    onMoveItem?.(item.id, listId);
+    setShowContextMenu(false);
+  };
+
   if (isEditing) {
     return (
       <div 
@@ -299,7 +331,8 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center gap-3 p-3 border-b last:border-b-0 transition-all duration-300 ease-in-out ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isFaded ? 'opacity-40' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'}`}
+      onContextMenu={handleContextMenu}
+      className={`flex items-center gap-3 p-3 border-b last:border-b-0 transition-all duration-300 ease-in-out ${item.isCompleted ? 'opacity-60' : ''} ${item.isProcessing ? 'opacity-50' : ''} ${isFaded ? 'opacity-40' : ''} ${isDragging ? 'cursor-grabbing touch-none' : 'cursor-pointer'} relative`}
     >
       <Checkbox
         checked={item.isCompleted}
@@ -392,6 +425,22 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
         >
           <Edit2 className="h-4 w-4 text-blue-600" />
         </Button>
+        {otherLists.length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setContextMenuPos({ x: rect.left, y: rect.bottom });
+              setShowContextMenu(!showContextMenu);
+            }}
+            disabled={loading || item.isProcessing}
+            title="Move to list"
+          >
+            <ArrowRightLeft className="h-4 w-4 text-purple-600" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -404,11 +453,36 @@ function SortableItem({ item, onToggleComplete, onDelete, onUpdate, loading, cat
           <Trash2 className="h-4 w-4 text-red-600" />
         </Button>
       </div>
+
+      {showContextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-md shadow-lg py-1 min-w-[160px]"
+          style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
+        >
+          <div className="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+            Move to...
+          </div>
+          {otherLists.map(list => (
+            <div
+              key={list.id}
+              className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-sm dark:text-gray-200 flex items-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMoveToList(list.id);
+              }}
+            >
+              <List className="h-3.5 w-3.5 text-gray-400" />
+              {list.name}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading, categories = [] }) {
+export function ItemList({ items, onToggleComplete, onDelete, onUpdate, onMoveItem, loading, categories = [], lists = [], currentListId }) {
   const [viewMode, setViewMode] = useState('list');
   const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
@@ -666,9 +740,12 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
                     onToggleComplete={onToggleComplete}
                     onDelete={onDelete}
                     onUpdate={onUpdate}
+                    onMoveItem={onMoveItem}
                     loading={loading}
                     categories={categories}
                     items={items}
+                    lists={lists}
+                    currentListId={currentListId}
                     isCategoryView={isCategoryView}
                     isFaded={item.id === fadedCompletedId}
                   />
@@ -775,9 +852,12 @@ export function ItemList({ items, onToggleComplete, onDelete, onUpdate, loading,
                       onToggleComplete={onToggleComplete}
                       onDelete={onDelete}
                       onUpdate={onUpdate}
+                      onMoveItem={onMoveItem}
                       loading={loading}
                       categories={categories}
                       items={items}
+                      lists={lists}
+                      currentListId={currentListId}
                     />
                   ))}
                 </div>

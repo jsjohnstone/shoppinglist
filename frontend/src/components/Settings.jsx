@@ -23,6 +23,9 @@ export function Settings({ onClose }) {
   const [editingDevice, setEditingDevice] = useState(null);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [newListName, setNewListName] = useState('');
+  const [editingListId, setEditingListId] = useState(null);
+  const [editingListName, setEditingListName] = useState('');
   const queryClient = useQueryClient();
 
   // API Keys queries
@@ -65,6 +68,12 @@ export function Settings({ onClose }) {
   const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: () => api.getCategories(),
+  });
+
+  // Lists queries
+  const { data: lists = [], isLoading: isLoadingLists } = useQuery({
+    queryKey: ['lists'],
+    queryFn: () => api.getLists(),
   });
 
   // Mutations
@@ -166,6 +175,31 @@ export function Settings({ onClose }) {
     mutationFn: (id) => api.deleteCategory(id),
     onSuccess: () => {
       queryClient.invalidateQueries(['categories']);
+    },
+  });
+
+  const createListMutation = useMutation({
+    mutationFn: (data) => api.createList(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['lists']);
+      setNewListName('');
+    },
+  });
+
+  const updateListMutation = useMutation({
+    mutationFn: ({ id, data }) => api.updateList(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['lists']);
+      setEditingListId(null);
+      setEditingListName('');
+    },
+  });
+
+  const deleteListMutation = useMutation({
+    mutationFn: (id) => api.deleteList(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['lists']);
+      queryClient.invalidateQueries(['items']);
     },
   });
 
@@ -293,6 +327,14 @@ export function Settings({ onClose }) {
               onClick={() => setActiveTab('categories')}
             >
               Categories
+            </button>
+            <button
+              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
+                activeTab === 'lists' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+              onClick={() => setActiveTab('lists')}
+            >
+              Lists
             </button>
           </div>
         </div>
@@ -772,6 +814,129 @@ export function Settings({ onClose }) {
                   }
                 }}
               />
+            </div>
+          )}
+
+          {/* Lists Tab */}
+          {activeTab === 'lists' && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Create and manage shopping lists. Items can be moved between lists.
+              </p>
+
+              <div className="flex gap-2">
+                <Input
+                  value={newListName}
+                  onChange={(e) => setNewListName(e.target.value)}
+                  placeholder="New list name..."
+                  className="flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newListName.trim()) {
+                      e.preventDefault();
+                      createListMutation.mutate({ name: newListName.trim() });
+                    }
+                  }}
+                />
+                <Button
+                  onClick={() => {
+                    if (newListName.trim()) {
+                      createListMutation.mutate({ name: newListName.trim() });
+                    }
+                  }}
+                  disabled={!newListName.trim() || createListMutation.isPending}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add List
+                </Button>
+              </div>
+
+              {isLoadingLists ? (
+                <div className="text-center py-8 text-gray-500">Loading lists...</div>
+              ) : lists.length === 0 ? (
+                <Card className="p-8 text-center text-gray-500">
+                  No lists yet. Add one to get started.
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {lists.map((list) => (
+                    <Card key={list.id} className="p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        {editingListId === list.id ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <Input
+                              value={editingListName}
+                              onChange={(e) => setEditingListName(e.target.value)}
+                              className="flex-1 h-8"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && editingListName.trim()) {
+                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim() } });
+                                } else if (e.key === 'Escape') {
+                                  setEditingListId(null);
+                                }
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                if (editingListName.trim()) {
+                                  updateListMutation.mutate({ id: list.id, data: { name: editingListName.trim() } });
+                                }
+                              }}
+                            >
+                              <Check className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingListId(null)}
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="font-medium dark:text-white">{list.name}</span>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setEditingListId(list.id);
+                                  setEditingListName(list.name);
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={async () => {
+                                  if (lists.length <= 1) {
+                                    alert('Cannot delete the last list.');
+                                    return;
+                                  }
+                                  if (confirm(`Delete list "${list.name}"? Items will be moved to the first remaining list.`)) {
+                                    try {
+                                      await deleteListMutation.mutateAsync(list.id);
+                                    } catch (error) {
+                                      alert(error.message || 'Failed to delete list');
+                                    }
+                                  }
+                                }}
+                                disabled={lists.length <= 1}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

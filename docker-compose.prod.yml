@@ -34,6 +34,7 @@ services:
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-shoppinglist}
       - JWT_SECRET=${JWT_SECRET}
+      - DISABLE_AUTH=${DISABLE_AUTH:-false}
       - PORT=3000
       - NODE_ENV=production
     restart: unless-stopped

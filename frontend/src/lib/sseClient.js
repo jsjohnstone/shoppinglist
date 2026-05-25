@@ -16,8 +16,9 @@ export class SSEClient {
     
     this.token = token;
     const baseUrl = import.meta.env.VITE_API_URL || '';
-    // Append token as query parameter since EventSource doesn't support custom headers
-    const url = `${baseUrl}/api/items/events?token=${encodeURIComponent(token)}`;
+    const url = token
+      ? `${baseUrl}/api/items/events?token=${encodeURIComponent(token)}`
+      : `${baseUrl}/api/items/events`;
     
     try {
       this.eventSource = new EventSource(url);

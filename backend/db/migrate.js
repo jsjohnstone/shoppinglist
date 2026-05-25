@@ -106,7 +106,7 @@ async function runMigration() {
       console.log('🔍 Verifying migrations were applied...');
       
       // Verify critical tables exist
-      const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings'];
+      const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings', 'lists'];
       const missingTables = [];
       
       for (const table of tablesToCheck) {
@@ -264,7 +264,7 @@ async function applyMissingMigrations(migrationNames) {
   console.log('');
   console.log('🔍 Re-verifying tables after direct application...');
   
-  const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings'];
+  const tablesToCheck = ['users', 'categories', 'items', 'devices', 'device_events', 'settings', 'lists'];
   let allTablesExist = true;
   
   for (const table of tablesToCheck) {

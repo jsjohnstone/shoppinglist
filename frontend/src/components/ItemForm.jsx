@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText, Check } from 'lucide-react';
+import { Plus, X, Scale, StickyNote, Tag, FolderOpen, Barcode, FileText, Check, List } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getIcon } from '../lib/icons';
 
@@ -133,8 +133,9 @@ function SimpleAutocomplete({ value, options, onSelect, onClose, onCreateNew, pl
   );
 }
 
-export function ItemForm({ onAdd, loading }) {
+export function ItemForm({ onAdd, loading, lists = [], selectedListId }) {
   const [name, setName] = useState('');
+  const [targetListId, setTargetListId] = useState(null);
   const [isNameActive, setIsNameActive] = useState(false);
   const [quantity, setQuantity] = useState('');
   const [quantityDraft, setQuantityDraft] = useState('');
@@ -236,6 +237,7 @@ export function ItemForm({ onAdd, loading }) {
     notes: false,
     relatedTo: false,
     category: false,
+    list: false,
   });
 
   const toggleField = (field) => {
@@ -352,6 +354,7 @@ export function ItemForm({ onAdd, loading }) {
         relatedTo: relatedTo || undefined,
         category: category || undefined,
         isBarcode: barcodeDetected,
+        ...(targetListId ? { listId: targetListId } : {}),
       });
 
       setName('');
@@ -361,7 +364,8 @@ export function ItemForm({ onAdd, loading }) {
       setCategory('');
       setBarcodeDetected(false);
       setProcessingBarcode(false);
-      
+      setTargetListId(null);
+
       setExpandedFields({
         quantity: false,
         notes: false,
@@ -659,6 +663,47 @@ export function ItemForm({ onAdd, loading }) {
               />
             )}
           </div>
+
+          {/* List picker - only show when multiple lists exist */}
+          {lists.length > 1 && (
+            <div className="relative">
+              <Badge
+                variant="interactive"
+                onClick={() => toggleField('list')}
+                className={`gap-1 ${targetListId ? 'bg-purple-50 dark:bg-purple-900/20 text-purple-900 dark:text-purple-200' : ''}`}
+              >
+                <List className="h-3 w-3" />
+                {targetListId
+                  ? lists.find(l => l.id === targetListId)?.name || 'List'
+                  : lists.find(l => l.id === selectedListId)?.name || 'List'}
+                {targetListId && (
+                  <span
+                    className="ml-1 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/40 p-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTargetListId(null);
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </span>
+                )}
+              </Badge>
+              {expandedFields.list && (
+                <SimpleAutocomplete
+                  value={targetListId ? lists.find(l => l.id === targetListId)?.name : ''}
+                  options={lists.map(l => l.name)}
+                  onSelect={(value) => {
+                    const list = lists.find(l => l.name === value);
+                    if (list) setTargetListId(list.id === selectedListId ? null : list.id);
+                    toggleField('list');
+                  }}
+                  onClose={() => toggleField('list')}
+                  placeholder="Select list..."
+                  icon={List}
+                />
+              )}
+            </div>
+          )}
 
           {/* Notes field - only show in single-add mode */}
           {!isMultiAdd && (

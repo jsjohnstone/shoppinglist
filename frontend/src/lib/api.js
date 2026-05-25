@@ -81,6 +81,12 @@ class ApiClient {
     }
   }
 
+  // Auth config
+  async getAuthConfig() {
+    const response = await fetch(`${API_URL}/auth/config`);
+    return response.json();
+  }
+
   // Auth
   async login(username, password) {
     const data = await this.request('/auth/login', {
@@ -176,6 +182,45 @@ class ApiClient {
   async deleteCategory(id) {
     return this.request(`/categories/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // Lists
+  async getLists() {
+    return this.request('/lists');
+  }
+
+  async createList(data) {
+    return this.request('/lists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateList(id, data) {
+    return this.request(`/lists/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteList(id) {
+    return this.request(`/lists/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderLists(listOrders) {
+    return this.request('/lists/reorder', {
+      method: 'POST',
+      body: JSON.stringify({ listOrders }),
+    });
+  }
+
+  async moveItem(id, listId) {
+    return this.request(`/items/${id}/move`, {
+      method: 'PUT',
+      body: JSON.stringify({ listId }),
     });
   }
 

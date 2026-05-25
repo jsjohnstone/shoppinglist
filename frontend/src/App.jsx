@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { LoginForm } from '@/components/Auth/LoginForm';
 import { RegisterForm } from '@/components/Auth/RegisterForm';
@@ -7,6 +7,7 @@ import { ItemForm } from '@/components/ItemForm';
 import { Settings } from '@/components/Settings';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/lib/api';
 import { SSEClient } from '@/lib/sseClient';
 import { queueManager } from '@/lib/queueManager';
@@ -16,14 +17,11 @@ import { LogOut, ShoppingCart, Settings as SettingsIcon } from 'lucide-react';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Keep retrying failed queries
       retry: 3,
       retryDelay: 1000,
     },
     mutations: {
-      // CRITICAL: Don't pause mutations when offline - let our error handling deal with it
       networkMode: 'always',
-      // Don't retry, let our queue handle it
       retry: 0,
     },
   },
@@ -32,127 +30,120 @@ const queryClient = new QueryClient({
 function ShoppingListApp() {
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState('login');
+  const [authRequired, setAuthRequired] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [queueCount, setQueueCount] = useState(0);
   const [processingQueue, setProcessingQueue] = useState(false);
+  const [selectedListId, setSelectedListId] = useState(() => {
+    return parseInt(localStorage.getItem('selectedListId') || '1');
+  });
   const queryClient = useQueryClient();
   const sseClient = useRef(null);
 
-  // Initialize IndexedDB
+  useEffect(() => {
+    localStorage.setItem('selectedListId', String(selectedListId));
+  }, [selectedListId]);
+
   useEffect(() => {
     initDB();
   }, []);
 
+  const itemsQueryKey = ['items', selectedListId];
+
   // Online/offline detection with queue processing
   useEffect(() => {
     const handleOnline = async () => {
-      console.log('🌐 Back online! Processing queued operations...');
       setIsOnline(true);
       setProcessingQueue(true);
-      
       try {
-        // Process queue when coming back online
         const result = await queueManager.processQueue();
-        
         if (result && result.processed > 0) {
-          console.log(`🔄 Refreshing UI after processing ${result.processed} operations`);
-          // Force immediate refetch of items to get real server state
-          await queryClient.refetchQueries(['items'], { force: true });
-          console.log('✅ UI refreshed with server state');
+          await queryClient.refetchQueries(itemsQueryKey, { force: true });
         } else {
-          // Still refresh even if no queue items, in case SSE missed updates
-          console.log('🔄 Refreshing UI to sync with server');
-          queryClient.invalidateQueries(['items']);
+          queryClient.invalidateQueries(itemsQueryKey);
         }
       } finally {
-        // Always re-enable SSE handling after queue completes
         setProcessingQueue(false);
       }
     };
-    
-    const handleOffline = () => {
-      console.log('📴 Gone offline');
-      setIsOnline(false);
-    };
-    
+
+    const handleOffline = () => setIsOnline(false);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [queryClient]);
+  }, [queryClient, selectedListId]);
 
-  // Update queue count
   useEffect(() => {
     const interval = setInterval(async () => {
       const count = await queueManager.getQueueCount();
       setQueueCount(count);
     }, 2000);
-    
     return () => clearInterval(interval);
   }, []);
 
   // SSE connection for real-time updates
   useEffect(() => {
     if (!user) return;
-    
-    console.log('🔌 Initializing SSE connection for user:', user.username);
-    
+
     sseClient.current = new SSEClient(
-      // onMessage
       (event) => {
-        console.log('📥 SSE event received:', event.type);
-        
-        // CRITICAL: Ignore SSE events while processing queue to prevent race conditions
-        if (processingQueue) {
-          console.log('⏸️  Ignoring SSE event (queue processing in progress)');
-          return;
-        }
-        
-        // Invalidate queries to refetch data
-        if (event.type === 'item_added' || 
-            event.type === 'item_updated' || 
-            event.type === 'item_deleted' ||
-            event.type === 'item_toggled') {
-          console.log('🔄 Invalidating items query due to:', event.type);
-          queryClient.invalidateQueries(['items']);
+        if (processingQueue) return;
+
+        if (event.type === 'item_moved') {
+          queryClient.invalidateQueries({ queryKey: ['items'] });
+        } else if (
+          event.type === 'item_added' ||
+          event.type === 'item_updated' ||
+          event.type === 'item_deleted' ||
+          event.type === 'item_toggled'
+        ) {
+          queryClient.invalidateQueries({ queryKey: itemsQueryKey });
         }
       },
-      // onError
       (error) => {
-        console.error('❌ SSE Error in App:', error);
+        console.error('SSE Error:', error);
       }
     );
-    
-    const connected = sseClient.current.connect(api.token);
-    if (!connected) {
-      console.warn('⚠️ SSE not supported, relying on manual refresh');
-    }
-    
+
+    const token = authRequired ? api.token : null;
+    sseClient.current.connect(token);
+
     return () => {
-      console.log('🔌 Disconnecting SSE');
       sseClient.current?.disconnect();
     };
-  }, [user, queryClient, processingQueue]);
+  }, [user, queryClient, processingQueue, selectedListId, authRequired]);
 
-  // Check if user is already logged in
+  // Check auth config and existing login
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const userData = await api.getCurrentUser();
-        setUser(userData);
+        const config = await api.getAuthConfig();
+        setAuthRequired(config.authRequired);
+        if (!config.authRequired) {
+          setUser({ id: 1, username: 'default' });
+          return;
+        }
+        if (api.token) {
+          const userData = await api.getCurrentUser();
+          setUser(userData);
+        }
       } catch (error) {
-        // Not logged in
-        setUser(null);
+        if (api.token) {
+          try {
+            const userData = await api.getCurrentUser();
+            setUser(userData);
+          } catch {
+            setUser(null);
+          }
+        }
       }
     };
-    
-    if (api.token) {
-      checkAuth();
-    }
+    checkAuth();
   }, []);
 
   const handleLogin = async (username, password) => {
@@ -171,13 +162,26 @@ function ShoppingListApp() {
     queryClient.clear();
   };
 
-  // Fetch items
-  const { data: items = [], isLoading, refetch } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => api.getItems(),
+  // Fetch lists
+  const { data: allLists = [] } = useQuery({
+    queryKey: ['lists'],
+    queryFn: () => api.getLists(),
+    enabled: !!user,
+  });
+
+  // Reset selectedListId if the selected list was deleted
+  useEffect(() => {
+    if (allLists.length > 0 && !allLists.find(l => l.id === selectedListId)) {
+      setSelectedListId(allLists[0].id);
+    }
+  }, [allLists, selectedListId]);
+
+  // Fetch items for selected list
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: itemsQueryKey,
+    queryFn: () => api.getItems({ listId: selectedListId }),
     enabled: !!user,
     refetchInterval: (query) => {
-      // Poll every 2 seconds if there are processing items
       const data = query?.state?.data;
       const hasProcessing = Array.isArray(data) && data.some(item => item.isProcessing);
       return hasProcessing ? 2000 : false;
@@ -194,116 +198,77 @@ function ShoppingListApp() {
   // Add item mutation with optimistic updates and offline support
   const addItemMutation = useMutation({
     mutationFn: async (itemData) => {
-      console.log('➕ Add item mutation called:', itemData);
+      const dataWithList = { ...itemData, listId: itemData.listId || selectedListId };
       const tempId = `temp-${Date.now()}`;
-      
-      // Add optimistically to UI
-      console.log('✨ Adding optimistic item with tempId:', tempId);
-      queryClient.setQueryData(['items'], (old = []) => [
-        { ...itemData, id: tempId, isOptimistic: true },
+
+      queryClient.setQueryData(itemsQueryKey, (old = []) => [
+        { ...dataWithList, id: tempId, isOptimistic: true },
         ...old
       ]);
-      
+
       try {
-        console.log('📡 Attempting API call...');
-        const result = await api.addItem(itemData);
-        console.log('✅ API call succeeded:', result);
-        // Replace optimistic with real
-        queryClient.setQueryData(['items'], (old = []) =>
+        const result = await api.addItem(dataWithList);
+        queryClient.setQueryData(itemsQueryKey, (old = []) =>
           old.map(item => item.id === tempId ? result : item)
         );
         return result;
       } catch (error) {
-        console.log('❗ API call failed:', error.message);
-        // Check if it's a network error
         if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
-          console.log('📦 Network error detected - queueing operation');
-          try {
-            await queueManager.queueOperation({
-              type: 'add',
-              data: itemData,
-              tempId
-            });
-            console.log('✅ Operation queued successfully');
-            // Keep optimistic item with pending indicator
-            queryClient.setQueryData(['items'], (old = []) =>
-              old.map(item => item.id === tempId ? { ...item, isPending: true } : item)
-            );
-            return { ...itemData, id: tempId, isPending: true };
-          } catch (queueError) {
-            console.error('❌ Failed to queue operation:', queueError);
-            throw queueError;
-          }
+          await queueManager.queueOperation({
+            type: 'add',
+            data: dataWithList,
+            tempId,
+            listId: dataWithList.listId,
+          });
+          queryClient.setQueryData(itemsQueryKey, (old = []) =>
+            old.map(item => item.id === tempId ? { ...item, isPending: true } : item)
+          );
+          return { ...dataWithList, id: tempId, isPending: true };
         }
-        console.log('❌ Real error (not network) - removing optimistic item');
-        // Real error - remove optimistic item
-        queryClient.setQueryData(['items'], (old = []) =>
+        queryClient.setQueryData(itemsQueryKey, (old = []) =>
           old.filter(item => item.id !== tempId)
         );
         throw error;
       }
     },
     onSuccess: (result) => {
-      console.log('🎉 Mutation onSuccess:', result);
       if (!result.isPending) {
-        queryClient.invalidateQueries(['items']);
+        queryClient.invalidateQueries({ queryKey: itemsQueryKey });
       }
-    },
-    onError: (error) => {
-      console.error('💥 Mutation onError:', error);
     },
   });
 
   // Toggle complete mutation with optimistic updates
   const toggleCompleteMutation = useMutation({
     mutationFn: async (id) => {
-      console.log('🔄 Toggle mutation called for item:', id);
-      
-      // Get current item to know what state we're toggling TO
-      const currentItems = queryClient.getQueryData(['items']) || [];
+      const currentItems = queryClient.getQueryData(itemsQueryKey) || [];
       const currentItem = currentItems.find(item => item.id === id);
       const targetCompletedState = currentItem ? !currentItem.isCompleted : true;
-      
-      // Optimistic toggle
-      console.log('✨ Toggling item optimistically to:', targetCompletedState);
-      queryClient.setQueryData(['items'], (old = []) =>
+
+      queryClient.setQueryData(itemsQueryKey, (old = []) =>
         old.map(item =>
           item.id === id
             ? { ...item, isCompleted: targetCompletedState, isOptimistic: true }
             : item
         )
       );
-      
+
       try {
-        console.log('📡 Attempting toggle API call...');
         const result = await api.toggleItemComplete(id);
-        console.log('✅ Toggle API call succeeded:', result);
         return result;
       } catch (error) {
-        console.log('❗ Toggle API call failed:', error.message);
         if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
-          console.log('📦 Network error - queueing setComplete operation with target state:', targetCompletedState);
-          try {
-            // IMPORTANT: Store the TARGET state, not just "toggle"
-            await queueManager.queueOperation({
-              type: 'setComplete',
-              id,
-              targetState: targetCompletedState
-            });
-            console.log('✅ SetComplete operation queued');
-            // Keep optimistic state with pending indicator
-            queryClient.setQueryData(['items'], (old = []) =>
-              old.map(item => item.id === id ? { ...item, isPending: true } : item)
-            );
-            return { id, isPending: true };
-          } catch (queueError) {
-            console.error('❌ Failed to queue toggle:', queueError);
-            throw queueError;
-          }
+          await queueManager.queueOperation({
+            type: 'setComplete',
+            id,
+            targetState: targetCompletedState
+          });
+          queryClient.setQueryData(itemsQueryKey, (old = []) =>
+            old.map(item => item.id === id ? { ...item, isPending: true } : item)
+          );
+          return { id, isPending: true };
         }
-        console.log('↩️ Real error - rolling back toggle');
-        // Rollback on real error
-        queryClient.setQueryData(['items'], (old = []) =>
+        queryClient.setQueryData(itemsQueryKey, (old = []) =>
           old.map(item =>
             item.id === id
               ? { ...item, isCompleted: !targetCompletedState, isOptimistic: false }
@@ -314,45 +279,35 @@ function ShoppingListApp() {
       }
     },
     onSuccess: (result) => {
-      console.log('🎉 Toggle mutation onSuccess:', result);
       if (!result?.isPending) {
-        queryClient.invalidateQueries(['items']);
+        queryClient.invalidateQueries({ queryKey: itemsQueryKey });
       }
-    },
-    onError: (error) => {
-      console.error('💥 Toggle mutation onError:', error);
     },
   });
 
   // Delete item mutation with optimistic updates
   const deleteItemMutation = useMutation({
     mutationFn: async (id) => {
-      // Optimistic delete
-      const previousItems = queryClient.getQueryData(['items']);
-      queryClient.setQueryData(['items'], (old = []) =>
+      const previousItems = queryClient.getQueryData(itemsQueryKey);
+      queryClient.setQueryData(itemsQueryKey, (old = []) =>
         old.filter(item => item.id !== id)
       );
-      
+
       try {
         await api.deleteItem(id);
         return { id };
       } catch (error) {
         if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
-          console.log('📦 Queueing delete operation for later');
-          await queueManager.queueOperation({
-            type: 'delete',
-            id
-          });
+          await queueManager.queueOperation({ type: 'delete', id });
           return { id, isPending: true };
         }
-        // Rollback on real error
-        queryClient.setQueryData(['items'], previousItems);
+        queryClient.setQueryData(itemsQueryKey, previousItems);
         throw error;
       }
     },
     onSuccess: (result) => {
       if (!result?.isPending) {
-        queryClient.invalidateQueries(['items']);
+        queryClient.invalidateQueries({ queryKey: itemsQueryKey });
       }
     },
   });
@@ -360,39 +315,45 @@ function ShoppingListApp() {
   // Update item mutation with optimistic updates
   const updateItemMutation = useMutation({
     mutationFn: async ({ id, data }) => {
-      // Optimistic update
-      const previousItems = queryClient.getQueryData(['items']);
-      queryClient.setQueryData(['items'], (old = []) =>
+      const previousItems = queryClient.getQueryData(itemsQueryKey);
+      queryClient.setQueryData(itemsQueryKey, (old = []) =>
         old.map(item =>
           item.id === id ? { ...item, ...data, isOptimistic: true } : item
         )
       );
-      
+
       try {
         const result = await api.updateItem(id, data);
         return result;
       } catch (error) {
         if (error.message === 'NETWORK_TIMEOUT' || error.message === 'NETWORK_ERROR') {
-          console.log('📦 Queueing update operation for later');
-          await queueManager.queueOperation({
-            type: 'update',
-            id,
-            data
-          });
-          queryClient.setQueryData(['items'], (old = []) =>
+          await queueManager.queueOperation({ type: 'update', id, data });
+          queryClient.setQueryData(itemsQueryKey, (old = []) =>
             old.map(item => item.id === id ? { ...item, isPending: true } : item)
           );
           return { id, isPending: true };
         }
-        // Rollback on real error
-        queryClient.setQueryData(['items'], previousItems);
+        queryClient.setQueryData(itemsQueryKey, previousItems);
         throw error;
       }
     },
     onSuccess: (result) => {
       if (!result?.isPending) {
-        queryClient.invalidateQueries(['items']);
+        queryClient.invalidateQueries({ queryKey: itemsQueryKey });
       }
+    },
+  });
+
+  // Move item to a different list
+  const moveItemMutation = useMutation({
+    mutationFn: async ({ id, listId }) => {
+      queryClient.setQueryData(itemsQueryKey, (old = []) =>
+        old.filter(item => item.id !== id)
+      );
+      return api.moveItem(id, listId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['items'] });
     },
   });
 
@@ -410,35 +371,48 @@ function ShoppingListApp() {
     );
   }
 
+  const selectedList = allLists.find(l => l.id === selectedListId);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <OfflineBanner isOnline={isOnline} queueCount={queueCount} />
-      
+
       <header>
         <div className="max-w-4xl mx-auto md:px-6 px-5 md:pt-6 md:pb-5 pt-4 pb-3 flex items-center justify-between">
           {/* Left side */}
           <div className="flex items-center gap-2">
-            {/* Logo icon - always visible */}
             <ShoppingCart className="h-6 w-6 text-gray-900 dark:text-white" />
-            
-            {/* Title - visible on all screen sizes */}
-            <h1 className="text-xl md:text-2xl font-bold dark:text-white">Shopping List</h1>
+            {allLists.length > 1 ? (
+              <Select value={String(selectedListId)} onValueChange={(v) => setSelectedListId(parseInt(v))}>
+                <SelectTrigger className="border-none shadow-none text-xl md:text-2xl font-bold p-0 h-auto bg-transparent focus:ring-0 w-auto gap-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allLists.map(list => (
+                    <SelectItem key={list.id} value={String(list.id)}>{list.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <h1 className="text-xl md:text-2xl font-bold dark:text-white">
+                {selectedList?.name || 'Shopping List'}
+              </h1>
+            )}
           </div>
-          
+
           {/* Right side */}
           <div className="flex items-center gap-2 md:gap-4">
-            
-            {/* Settings button */}
             <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
               <SettingsIcon className="h-4 w-4" />
               <span className="hidden md:inline ml-2">Settings</span>
             </Button>
-            
-            {/* Logout button */}
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-              <span className="hidden md:inline ml-2">Logout</span>
-            </Button>
+
+            {authRequired && (
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+                <span className="hidden md:inline ml-2">Logout</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -448,6 +422,8 @@ function ShoppingListApp() {
           <ItemForm
             onAdd={addItemMutation.mutateAsync}
             loading={addItemMutation.isPending}
+            lists={allLists}
+            selectedListId={selectedListId}
           />
         </div>
 
@@ -459,13 +435,15 @@ function ShoppingListApp() {
             onToggleComplete={toggleCompleteMutation.mutate}
             onDelete={deleteItemMutation.mutate}
             onUpdate={(id, data) => updateItemMutation.mutate({ id, data })}
+            onMoveItem={(id, listId) => moveItemMutation.mutate({ id, listId })}
             loading={toggleCompleteMutation.isPending || deleteItemMutation.isPending || updateItemMutation.isPending}
             categories={categories}
+            lists={allLists}
+            currentListId={selectedListId}
           />
         )}
       </main>
 
-      {/* Settings Modal */}
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
 
       <footer>

@@ -14,6 +14,13 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+export const lists = pgTable('lists', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 export const categories = pgTable('categories', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull().unique(),
@@ -35,6 +42,7 @@ export const items = pgTable('items', {
   completedAt: timestamp('completed_at'),
   sortOrder: integer('sort_order').default(0),
   addedBy: integer('added_by').references(() => users.id),
+  listId: integer('list_id').references(() => lists.id).default(1),
   barcode: varchar('barcode', { length: 255 }),
   wasScanned: boolean('was_scanned').default(false),
   createdAt: timestamp('created_at').defaultNow(),

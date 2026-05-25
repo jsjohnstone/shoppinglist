@@ -390,11 +390,9 @@ function ShoppingListApp() {
             )}
             {allLists.length > 1 ? (
               <Select value={String(selectedListId)} onValueChange={(v) => setSelectedListId(parseInt(v))}>
-                <SelectTrigger className="border-none shadow-none text-xl md:text-2xl font-bold p-0 h-auto bg-transparent focus:ring-0 w-auto gap-2">
-                  <span className="flex items-center gap-2">
-                    {selectedList?.icon && <img src={selectedList.icon} alt="" className="w-5 h-5 rounded object-cover" />}
-                    <SelectValue />
-                  </span>
+                <SelectTrigger className="inline-flex items-center border-none shadow-none text-xl md:text-2xl font-bold p-0 h-auto bg-transparent focus:ring-0 w-auto gap-2">
+                  {selectedList?.icon && <img src={selectedList.icon} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0" />}
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {allLists.map(list => (

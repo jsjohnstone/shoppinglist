@@ -1,6 +1,7 @@
 import express from 'express';
 import { db } from '../db/index.js';
 import { apiKeys } from '../db/schema.js';
+import { hashApiKey, apiKeyLastFour } from '../services/apiKeys.js';
 import { eq } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import crypto from 'crypto';
@@ -10,10 +11,12 @@ const router = express.Router();
 // Get all API keys
 router.get('/', requireAdmin, async (req, res) => {
   try {
+    // Only hashes are stored, so the keys themselves are never returned here -
+    // just the last four characters to tell them apart
     const keys = await db.select({
       id: apiKeys.id,
       name: apiKeys.name,
-      key: apiKeys.key,
+      keyLastFour: apiKeys.keyLastFour,
       createdAt: apiKeys.createdAt,
     })
     .from(apiKeys)
@@ -35,17 +38,24 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Name is required' });
     }
 
-    // Generate a random API key
+    // Generate a random API key and store only its hash
     const key = crypto.randomBytes(32).toString('hex');
 
     const [newKey] = await db.insert(apiKeys)
       .values({
         name,
-        key,
+        keyHash: hashApiKey(key),
+        keyLastFour: apiKeyLastFour(key),
       })
-      .returning();
+      .returning({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        keyLastFour: apiKeys.keyLastFour,
+        createdAt: apiKeys.createdAt,
+      });
 
-    res.status(201).json(newKey);
+    // This response is the only time the full key is available
+    res.status(201).json({ ...newKey, key });
   } catch (error) {
     console.error('Error creating API key:', error);
     res.status(500).json({ error: 'Failed to create API key' });

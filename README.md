@@ -223,6 +223,14 @@ The name matching tests need nothing else. The route tests are skipped unless `T
 
 There's a cool additional project [here](https://www.github.com/jsjohnstone/shoppinglist-barcodescanner) that you can deploy on a Raspberry PI or similar, plugin a USB scanner, and then scan items to have them automatically added to the shopping list. It's pretty rough, but it functions!
 
+## API key storage
+
+API keys are stored as SHA-256 hashes, never in readable form. The full key is shown once, when you create it in **Settings > API Keys**; after that the app can only show its last four characters. If a key is lost, delete it and create a new one.
+
+Keys created before this change keep working. The first start after upgrading runs a migration (`drizzle/0011_hash_api_keys.sql`) that replaces each stored key with its hash. That step cannot be undone: the old keys cannot be read back from the database afterwards. Going back to an older image after the migration needs the database restored from a backup taken before the upgrade, because the older code expects the plaintext column.
+
+Run the tests with `npm test`. The database tests are skipped unless `TEST_DATABASE_URL` points at a migrated, throwaway PostgreSQL database.
+
 ## License
 
 ISC

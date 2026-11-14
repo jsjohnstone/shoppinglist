@@ -39,6 +39,8 @@ export function Settings({ onClose }) {
   const [activeTab, setActiveTab] = useState('api-keys');
   const [newKeyName, setNewKeyName] = useState('');
   const [copiedKey, setCopiedKey] = useState(null);
+  // The full key is only returned once, when it is created
+  const [createdKey, setCreatedKey] = useState(null);
   const [haConfig, setHaConfig] = useState({ ha_url: '', ha_token: '', default_tts_service: 'tts.google_translate_say' });
   const [ollamaConfig, setOllamaConfig] = useState({ enabled: false, url: '', model: '' });
   const [selectedDevice, setSelectedDevice] = useState(null);
@@ -103,9 +105,10 @@ export function Settings({ onClose }) {
   // Mutations
   const createKeyMutation = useMutation({
     mutationFn: (keyData) => api.createApiKey(keyData),
-    onSuccess: () => {
+    onSuccess: (newKey) => {
       queryClient.invalidateQueries(['api-keys']);
       setNewKeyName('');
+      setCreatedKey(newKey);
     },
   });
 
@@ -368,7 +371,7 @@ export function Settings({ onClose }) {
           {activeTab === 'api-keys' && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                API keys allow external apps (like barcode scanners) to add items to your shopping list.
+                API keys allow external apps (like barcode scanners) to add items to your shopping list. A key is shown once, when you create it.
               </p>
 
               <form onSubmit={handleCreateKey} className="flex gap-2">
@@ -384,6 +387,28 @@ export function Settings({ onClose }) {
                 </Button>
               </form>
 
+              {createdKey && (
+                <Card className="p-4 border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium dark:text-gray-100">New key for "{createdKey.name}"</div>
+                      <div className="text-sm font-mono break-all mt-1 dark:text-gray-100">{createdKey.key}</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                        Copy this key now and store it somewhere safe. It is not saved in a readable form and will not be shown again.
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="icon" title="Copy key" onClick={() => copyToClipboard(createdKey.key)}>
+                        {copiedKey === createdKey.key ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setCreatedKey(null)}>
+                        Done
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {isLoadingKeys ? (
                 <div className="text-center py-8 text-gray-500">Loading API keys...</div>
               ) : apiKeys.length === 0 ? (
@@ -397,15 +422,14 @@ export function Settings({ onClose }) {
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium dark:text-gray-100">{key.name}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400 font-mono truncate">{key.key}</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400 font-mono truncate">
+                            {key.keyLastFour ? `••••••••${key.keyLastFour}` : '••••••••'}
+                          </div>
                           <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                             Created: {new Date(key.createdAt).toLocaleDateString()}
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => copyToClipboard(key.key)}>
-                            {copiedKey === key.key ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                          </Button>
                           <Button variant="ghost" size="icon" onClick={() => deleteKeyMutation.mutate(key.id)}>
                             <Trash2 className="h-4 w-4 text-red-600" />
                           </Button>

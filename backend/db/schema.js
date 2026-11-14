@@ -9,7 +9,9 @@ export const users = pgTable('users', {
 
 export const apiKeys = pgTable('api_keys', {
   id: serial('id').primaryKey(),
-  key: varchar('key', { length: 255 }).notNull().unique(),
+  // SHA-256 of the key. The key itself is never stored.
+  keyHash: varchar('key_hash', { length: 64 }).notNull().unique(),
+  keyLastFour: varchar('key_last_four', { length: 4 }),
   name: varchar('name', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
 });

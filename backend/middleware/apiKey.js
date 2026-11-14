@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { apiKeys } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { hashApiKey, hashesMatch } from '../services/apiKeys.js';
 
 export async function authenticateApiKey(req, res, next) {
   // Support both X-API-Key header and Authorization Bearer header
@@ -19,13 +20,15 @@ export async function authenticateApiKey(req, res, next) {
   }
 
   try {
-    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.key, apiKey)).limit(1);
-    
-    if (!key) {
+    // Only hashes are stored, so look the key up by its hash
+    const presentedHash = hashApiKey(apiKey);
+    const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, presentedHash)).limit(1);
+
+    if (!key || !hashesMatch(key.keyHash, presentedHash)) {
       return res.status(403).json({ error: 'Invalid API key' });
     }
 
-    req.apiKey = key;
+    req.apiKey = { id: key.id, name: key.name, createdAt: key.createdAt };
     next();
   } catch (error) {
     console.error('API key authentication error:', error);

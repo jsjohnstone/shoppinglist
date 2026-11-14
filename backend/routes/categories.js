@@ -2,7 +2,7 @@ import express from 'express';
 import { db } from '../db/index.js';
 import { categories, items } from '../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -50,7 +50,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Update category
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, sortOrder, icon, color } = req.body;
@@ -78,7 +78,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Delete category
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -110,7 +110,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // Reorder categories
-router.post('/reorder', authenticateToken, async (req, res) => {
+router.post('/reorder', requireAdmin, async (req, res) => {
   try {
     const { categoryOrders } = req.body; // Array of { id, sortOrder }
 

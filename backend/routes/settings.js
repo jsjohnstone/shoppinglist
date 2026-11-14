@@ -2,7 +2,7 @@ import express from 'express';
 import { db } from '../db/index.js';
 import { settings, ttsPhrases } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { haService } from '../services/homeassistant.js';
 import axios from 'axios';
 
@@ -40,7 +40,7 @@ async function setSetting(key, value) {
 }
 
 // Get all settings (admin only)
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const allSettings = await db.select().from(settings);
     
@@ -62,7 +62,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Get Home Assistant configuration (admin only)
-router.get('/homeassistant', authenticateToken, async (req, res) => {
+router.get('/homeassistant', requireAdmin, async (req, res) => {
   try {
     const ha_url = await getSetting('ha_url');
     const ha_token = await getSetting('ha_token');
@@ -85,7 +85,7 @@ router.get('/homeassistant', authenticateToken, async (req, res) => {
 });
 
 // Update Home Assistant configuration (admin only)
-router.put('/homeassistant', authenticateToken, async (req, res) => {
+router.put('/homeassistant', requireAdmin, async (req, res) => {
   try {
     const { ha_url, ha_token, default_tts_service } = req.body;
 
@@ -117,7 +117,7 @@ router.put('/homeassistant', authenticateToken, async (req, res) => {
 });
 
 // Delete Home Assistant configuration (admin only)
-router.delete('/homeassistant', authenticateToken, async (req, res) => {
+router.delete('/homeassistant', requireAdmin, async (req, res) => {
   try {
     await db.delete(settings).where(eq(settings.key, 'ha_url'));
     await db.delete(settings).where(eq(settings.key, 'ha_token'));
@@ -135,7 +135,7 @@ router.delete('/homeassistant', authenticateToken, async (req, res) => {
 });
 
 // Get Ollama configuration (admin only)
-router.get('/ollama', authenticateToken, async (req, res) => {
+router.get('/ollama', requireAdmin, async (req, res) => {
   try {
     const ollama_enabled = await getSetting('ollama_enabled', 'false');
     const ollama_url = await getSetting('ollama_url', 'http://192.168.5.109:11434');
@@ -153,7 +153,7 @@ router.get('/ollama', authenticateToken, async (req, res) => {
 });
 
 // Update Ollama configuration (admin only)
-router.put('/ollama', authenticateToken, async (req, res) => {
+router.put('/ollama', requireAdmin, async (req, res) => {
   try {
     const { enabled, url, model } = req.body;
 
@@ -193,7 +193,7 @@ router.put('/ollama', authenticateToken, async (req, res) => {
 });
 
 // Test Ollama connection (admin only)
-router.post('/ollama/test', authenticateToken, async (req, res) => {
+router.post('/ollama/test', requireAdmin, async (req, res) => {
   try {
     const ollama_url = await getSetting('ollama_url', 'http://192.168.5.109:11434');
     const ollama_model = await getSetting('ollama_model', 'llama3.2');
@@ -245,7 +245,7 @@ router.post('/ollama/test', authenticateToken, async (req, res) => {
 });
 
 // Get all TTS phrases (admin only)
-router.get('/tts-phrases', authenticateToken, async (req, res) => {
+router.get('/tts-phrases', requireAdmin, async (req, res) => {
   try {
     const phrases = await db
       .select({
@@ -264,7 +264,7 @@ router.get('/tts-phrases', authenticateToken, async (req, res) => {
 });
 
 // Update a TTS phrase (admin only)
-router.put('/tts-phrases/:key', authenticateToken, async (req, res) => {
+router.put('/tts-phrases/:key', requireAdmin, async (req, res) => {
   try {
     const { key } = req.params;
     const { template } = req.body;
@@ -313,7 +313,7 @@ router.put('/tts-phrases/:key', authenticateToken, async (req, res) => {
 });
 
 // Reset TTS phrases to defaults (admin only)
-router.post('/tts-phrases/reset', authenticateToken, async (req, res) => {
+router.post('/tts-phrases/reset', requireAdmin, async (req, res) => {
   try {
     // Delete all existing phrases
     await db.delete(ttsPhrases);

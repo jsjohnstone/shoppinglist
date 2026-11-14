@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { db } from '../db/index.js';
 import { devices } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { authenticateDevice, authenticateDeviceOptional } from '../middleware/deviceAuth.js';
 import { logDeviceEvent, getDeviceEvents } from '../services/deviceEvents.js';
 
@@ -108,7 +108,7 @@ router.post('/heartbeat', authenticateDeviceOptional, async (req, res) => {
 });
 
 // List all devices (admin only)
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const allDevices = await db
       .select({
@@ -134,7 +134,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Approve device (admin only)
-router.patch('/:id/approve', authenticateToken, async (req, res) => {
+router.patch('/:id/approve', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { friendly_name, ha_speaker_entity, usb_device_path } = req.body;
@@ -187,7 +187,7 @@ router.patch('/:id/approve', authenticateToken, async (req, res) => {
 });
 
 // Reject/delete device (admin only)
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -210,7 +210,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // Update device settings (admin only)
-router.patch('/:id', authenticateToken, async (req, res) => {
+router.patch('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { friendly_name, ha_speaker_entity, usb_device_path } = req.body;
@@ -259,7 +259,7 @@ router.patch('/:id', authenticateToken, async (req, res) => {
 });
 
 // Get device events (admin only)
-router.get('/:id/events', authenticateToken, async (req, res) => {
+router.get('/:id/events', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 50;

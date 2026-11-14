@@ -2,7 +2,7 @@ import express from 'express';
 import { db } from '../db/index.js';
 import { items, categories, lists } from '../db/schema.js';
 import { eq, and, or, desc } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, getAuthMode } from '../middleware/auth.js';
 import { authenticateApiKey } from '../middleware/apiKey.js';
 import { authenticateDevice } from '../middleware/deviceAuth.js';
 import { processItem, isOllamaEnabled } from '../services/llm.js';
@@ -29,6 +29,17 @@ function broadcastToUser(userId, event) {
   });
 }
 
+// Helper to broadcast a change made through the web UI. Normally this goes to
+// the acting user's own clients. When the list is open without a login
+// (AUTH_MODE=admin) there may be no user, so everyone gets it.
+function broadcastItemEvent(req, event) {
+  if (getAuthMode() === 'admin') {
+    broadcastToAll(event);
+  } else if (req.user?.id) {
+    broadcastToUser(req.user.id, event);
+  }
+}
+
 // Helper to broadcast to ALL connected clients (for device/API additions)
 function broadcastToAll(event) {
   sseClients.forEach(client => {
@@ -46,25 +57,35 @@ function broadcastToAll(event) {
   router.get('/events', async (req, res) => {
     let user;
 
-    if (process.env.DISABLE_AUTH === 'true') {
+    const authMode = getAuthMode();
+    // With the list open (AUTH_MODE=admin) a login is optional here
+    const anonymousUser = { id: null, username: 'anonymous' };
+
+    if (authMode === 'none') {
       user = { id: 1, username: 'default' };
     } else {
       // EventSource doesn't support custom headers, so we accept token via query param
       const token = req.query.token || req.headers.authorization?.replace('Bearer ', '');
 
-      if (!token) {
+      if (!token && authMode === 'admin') {
+        user = anonymousUser;
+      } else if (!token) {
         logger.warn('SSE connection rejected - no token');
         return res.status(401).json({ error: 'No authentication token provided' });
-      }
-
-      // Verify token
-      try {
-        const jwt = await import('jsonwebtoken');
-        const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        user = decoded;
-      } catch (error) {
-        logger.warn('SSE connection rejected - invalid token');
-        return res.status(401).json({ error: 'Invalid authentication token' });
+      } else {
+        // Verify token
+        try {
+          const jwt = await import('jsonwebtoken');
+          const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+          user = decoded;
+        } catch (error) {
+          if (authMode === 'admin') {
+            user = anonymousUser;
+          } else {
+            logger.warn('SSE connection rejected - invalid token');
+            return res.status(401).json({ error: 'Invalid authentication token' });
+          }
+        }
       }
     }
 
@@ -283,6 +304,14 @@ router.get('/', authenticateToken, async (req, res) => {
       items: itemsWithCategories,
     });
 
+    // Broadcast to connected web clients
+    for (const item of itemsWithCategories) {
+      broadcastItemEvent(req, {
+        type: 'item_added',
+        item,
+      });
+    }
+
     // Process each item asynchronously if Ollama is enabled
     if (ollamaEnabled) {
       for (const item of createdItems) {
@@ -373,13 +402,11 @@ router.get('/', authenticateToken, async (req, res) => {
     // Return immediately with processing state
     res.status(201).json(itemWithCategory);
 
-    // Broadcast to all users
-    if (req.user?.id) {
-      broadcastToUser(req.user.id, {
-        type: 'item_added',
-        item: itemWithCategory,
-      });
-    }
+    // Broadcast to connected web clients
+    broadcastItemEvent(req, {
+      type: 'item_added',
+      item: itemWithCategory,
+    });
 
     // Process asynchronously only if Ollama is enabled
     if (shouldProcess) {
@@ -843,13 +870,11 @@ router.post('/api-add', authenticateApiKey, async (req, res) => {
 
     res.json(itemWithCategory);
 
-    // Broadcast to all users
-    if (req.user?.id) {
-      broadcastToUser(req.user.id, {
-        type: 'item_updated',
-        item: itemWithCategory,
-      });
-    }
+    // Broadcast to connected web clients
+    broadcastItemEvent(req, {
+      type: 'item_updated',
+      item: itemWithCategory,
+    });
   } catch (error) {
     logger.error('Error updating item', {
       userId: req.user.id,
@@ -888,13 +913,11 @@ router.patch('/:id/complete', authenticateToken, async (req, res) => {
 
     res.json(updatedItem);
 
-    // Broadcast to all users
-    if (req.user?.id) {
-      broadcastToUser(req.user.id, {
-        type: 'item_toggled',
-        item: updatedItem,
-      });
-    }
+    // Broadcast to connected web clients
+    broadcastItemEvent(req, {
+      type: 'item_toggled',
+      item: updatedItem,
+    });
   } catch (error) {
     console.error('Error toggling item completion:', error);
     res.status(500).json({ error: 'Failed to toggle completion' });
@@ -933,13 +956,11 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
 
     res.json(updatedItem);
 
-    // Broadcast to all users
-    if (req.user?.id) {
-      broadcastToUser(req.user.id, {
-        type: 'item_toggled',
-        item: updatedItem,
-      });
-    }
+    // Broadcast to connected web clients
+    broadcastItemEvent(req, {
+      type: 'item_toggled',
+      item: updatedItem,
+    });
   } catch (error) {
     console.error('Error setting item completion:', error);
     res.status(500).json({ error: 'Failed to set completion status' });
@@ -973,13 +994,11 @@ router.put('/:id/complete', authenticateToken, async (req, res) => {
 
       res.json({ message: 'Item deleted successfully' });
 
-      // Broadcast to all users
-      if (req.user?.id) {
-        broadcastToUser(req.user.id, {
-          type: 'item_deleted',
-          itemId: parseInt(id),
-        });
-      }
+      // Broadcast to connected web clients
+      broadcastItemEvent(req, {
+        type: 'item_deleted',
+        itemId: parseInt(id),
+      });
     } catch (error) {
       logger.error('Error deleting item', {
         userId: req.user.id,

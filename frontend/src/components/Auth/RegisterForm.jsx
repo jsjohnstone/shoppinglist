@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export function RegisterForm({ onRegister, onToggleMode }) {
+export function RegisterForm({ onRegister, onToggleMode, onCancel, description }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,7 +36,7 @@ export function RegisterForm({ onRegister, onToggleMode }) {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Shopping List</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardDescription>{description || 'Create a new account'}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -77,15 +77,28 @@ export function RegisterForm({ onRegister, onToggleMode }) {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating account...' : 'Register'}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={onToggleMode}
-              disabled={loading}
-            >
-              Already have an account? Sign in
-            </Button>
+            {onToggleMode && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={onToggleMode}
+                disabled={loading}
+              >
+                Already have an account? Sign in
+              </Button>
+            )}
+            {onCancel && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={onCancel}
+                disabled={loading}
+              >
+                Back to the list
+              </Button>
+            )}
           </form>
         </CardContent>
       </Card>

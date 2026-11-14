@@ -15,6 +15,7 @@ import homeassistantRoutes from './routes/homeassistant.js';
 import settingsRoutes from './routes/settings.js';
 import listsRoutes from './routes/lists.js';
 import { startCleanupJob } from './services/cleanup.js';
+import { getAuthMode } from './middleware/auth.js';
 import { db } from './db/index.js';
 import { users } from './db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -60,7 +61,7 @@ logger.info('Starting server', {
 });
 
 async function ensureDefaultUser() {
-  if (process.env.DISABLE_AUTH !== 'true') return;
+  if (getAuthMode() !== 'none') return;
   try {
     const [existing] = await db.select().from(users).where(eq(users.username, 'default')).limit(1);
     if (!existing) {
@@ -78,7 +79,8 @@ app.listen(PORT, async () => {
   logger.info('Server started successfully', {
     port: PORT,
     environment: process.env.NODE_ENV || 'development',
-    authDisabled: process.env.DISABLE_AUTH === 'true',
+    authMode: getAuthMode(),
+    authDisabled: getAuthMode() === 'none',
   });
 
   await ensureDefaultUser();

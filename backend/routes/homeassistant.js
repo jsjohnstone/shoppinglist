@@ -1,12 +1,12 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { authenticateDevice } from '../middleware/deviceAuth.js';
 import { haService } from '../services/homeassistant.js';
 
 const router = express.Router();
 
 // Test Home Assistant connection (admin only)
-router.post('/test', authenticateToken, async (req, res) => {
+router.post('/test', requireAdmin, async (req, res) => {
   try {
     const result = await haService.testConnection();
     res.json(result);
@@ -20,7 +20,7 @@ router.post('/test', authenticateToken, async (req, res) => {
 });
 
 // Get media player entities (admin only)
-router.get('/entities', authenticateToken, async (req, res) => {
+router.get('/entities', requireAdmin, async (req, res) => {
   try {
     const entities = await haService.getMediaPlayerEntities();
     res.json(entities);
@@ -31,7 +31,7 @@ router.get('/entities', authenticateToken, async (req, res) => {
 });
 
 // Get all states (admin only)
-router.get('/states', authenticateToken, async (req, res) => {
+router.get('/states', requireAdmin, async (req, res) => {
   try {
     const states = await haService.getStates();
     res.json(states);

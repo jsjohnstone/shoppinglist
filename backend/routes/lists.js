@@ -2,7 +2,7 @@ import express from 'express';
 import { db } from '../db/index.js';
 import { lists, items } from '../db/schema.js';
 import { eq, asc, count } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -19,7 +19,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name, icon } = req.body;
 
@@ -43,7 +43,7 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, icon } = req.body;
@@ -71,7 +71,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const listId = parseInt(id);
@@ -102,7 +102,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/reorder', authenticateToken, async (req, res) => {
+router.post('/reorder', requireAdmin, async (req, res) => {
   try {
     const { listOrders } = req.body;
 

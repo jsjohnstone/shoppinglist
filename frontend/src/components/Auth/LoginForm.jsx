@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export function LoginForm({ onLogin, onToggleMode }) {
+export function LoginForm({ onLogin, onToggleMode, onCancel, description }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -29,7 +29,7 @@ export function LoginForm({ onLogin, onToggleMode }) {
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Shopping List</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <CardDescription>{description || 'Sign in to your account'}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -59,15 +59,28 @@ export function LoginForm({ onLogin, onToggleMode }) {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={onToggleMode}
-              disabled={loading}
-            >
-              Don't have an account? Register
-            </Button>
+            {onToggleMode && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={onToggleMode}
+                disabled={loading}
+              >
+                Don't have an account? Register
+              </Button>
+            )}
+            {onCancel && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={onCancel}
+                disabled={loading}
+              >
+                Back to the list
+              </Button>
+            )}
           </form>
         </CardContent>
       </Card>

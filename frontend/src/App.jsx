@@ -27,10 +27,17 @@ const queryClient = new QueryClient({
   },
 });
 
+// Stand-in user while the list is used without a login (AUTH_MODE=admin)
+const ANONYMOUS_USER = { id: null, username: 'anonymous', anonymous: true };
+
 function ShoppingListApp() {
   const [user, setUser] = useState(null);
-  const [authMode, setAuthMode] = useState('login');
-  const [authRequired, setAuthRequired] = useState(true);
+  const [authForm, setAuthForm] = useState('login');
+  // full: login for everything, admin: list is open and settings need a login, none: no login
+  const [authMode, setAuthMode] = useState('full');
+  const [registrationOpen, setRegistrationOpen] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [showSignIn, setShowSignIn] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [queueCount, setQueueCount] = useState(0);
@@ -110,22 +117,39 @@ function ShoppingListApp() {
       }
     );
 
-    const token = authRequired ? api.token : null;
+    const token = authMode === 'none' ? null : api.token;
     sseClient.current.connect(token);
 
     return () => {
       sseClient.current?.disconnect();
     };
-  }, [user, queryClient, processingQueue, selectedListId, authRequired]);
+  }, [user, queryClient, processingQueue, selectedListId, authMode]);
 
   // Check auth config and existing login
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const config = await api.getAuthConfig();
-        setAuthRequired(config.authRequired);
-        if (!config.authRequired) {
+        const mode = config.authMode || (config.authRequired ? 'full' : 'none');
+        setAuthMode(mode);
+        setRegistrationOpen(config.registrationOpen !== false);
+        if (mode === 'none') {
           setUser({ id: 1, username: 'default' });
+          return;
+        }
+        if (mode === 'admin') {
+          // The list is usable without a login; a stored login unlocks settings
+          let signedIn = null;
+          if (api.token) {
+            try {
+              signedIn = await api.getCurrentUser();
+            } catch (error) {
+              if (!String(error.message).startsWith('NETWORK_')) {
+                api.logout();
+              }
+            }
+          }
+          setUser(signedIn || ANONYMOUS_USER);
           return;
         }
         if (api.token) {
@@ -141,25 +165,55 @@ function ShoppingListApp() {
             setUser(null);
           }
         }
+      } finally {
+        setAuthChecked(true);
       }
     };
     checkAuth();
   }, []);
 
+  // Signed in with a real account (or no login needed at all)
+  const isAdmin = authMode === 'none' || (!!user && !user.anonymous);
+
+  const handleSignedIn = (signedInUser) => {
+    setUser(signedInUser);
+    setRegistrationOpen(false);
+    if (showSignIn) {
+      // Came here from the Settings button, so carry on to settings
+      setShowSignIn(false);
+      setShowSettings(true);
+    }
+  };
+
   const handleLogin = async (username, password) => {
     const data = await api.login(username, password);
-    setUser(data.user);
+    handleSignedIn(data.user);
   };
 
   const handleRegister = async (username, password) => {
     const data = await api.register(username, password);
-    setUser(data.user);
+    handleSignedIn(data.user);
   };
 
   const handleLogout = () => {
     api.logout();
+    setShowSettings(false);
+    if (authMode === 'admin') {
+      // Back to using the list without a login
+      setUser(ANONYMOUS_USER);
+      return;
+    }
     setUser(null);
     queryClient.clear();
+  };
+
+  const handleOpenSettings = () => {
+    if (isAdmin) {
+      setShowSettings(true);
+    } else {
+      setAuthForm(registrationOpen ? 'register' : 'login');
+      setShowSignIn(true);
+    }
   };
 
   // Fetch lists
@@ -357,16 +411,28 @@ function ShoppingListApp() {
     },
   });
 
-  if (!user) {
-    return authMode === 'login' ? (
+  if (!authChecked) {
+    return null;
+  }
+
+  if (!user || showSignIn) {
+    // In admin mode this is the "sign in to manage" step, reached from Settings
+    const forAdmin = authMode === 'admin';
+    const onCancel = showSignIn ? () => setShowSignIn(false) : undefined;
+
+    return authForm === 'login' ? (
       <LoginForm
         onLogin={handleLogin}
-        onToggleMode={() => setAuthMode('register')}
+        onToggleMode={registrationOpen ? () => setAuthForm('register') : undefined}
+        onCancel={onCancel}
+        description={forAdmin ? 'Sign in to change settings' : undefined}
       />
     ) : (
       <RegisterForm
         onRegister={handleRegister}
-        onToggleMode={() => setAuthMode('login')}
+        onToggleMode={() => setAuthForm('login')}
+        onCancel={onCancel}
+        description={forAdmin ? 'Create the first account to manage settings' : undefined}
       />
     );
   }
@@ -411,12 +477,12 @@ function ShoppingListApp() {
 
           {/* Right side */}
           <div className="flex items-center gap-2 md:gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)}>
+            <Button variant="ghost" size="sm" onClick={handleOpenSettings}>
               <SettingsIcon className="h-4 w-4" />
               <span className="hidden md:inline ml-2">Settings</span>
             </Button>
 
-            {authRequired && (
+            {authMode !== 'none' && isAdmin && (
               <Button variant="ghost" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" />
                 <span className="hidden md:inline ml-2">Logout</span>
@@ -453,7 +519,7 @@ function ShoppingListApp() {
         )}
       </main>
 
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      {showSettings && isAdmin && <Settings onClose={() => setShowSettings(false)} />}
 
       <footer>
         <div className="max-w-4xl mx-auto px-6 pt-6 pb-8 flex items-center justify-center">

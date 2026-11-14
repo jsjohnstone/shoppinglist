@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node backend/server.js",
     "migrate": "node backend/db/migrate.js",
+    "test": "node --test",
     "db:generate": "drizzle-kit generate:pg"
   },
   "keywords": [

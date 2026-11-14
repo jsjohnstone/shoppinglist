@@ -2,13 +2,13 @@ import express from 'express';
 import { db } from '../db/index.js';
 import { apiKeys } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { authenticateToken } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/auth.js';
 import crypto from 'crypto';
 
 const router = express.Router();
 
 // Get all API keys
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', requireAdmin, async (req, res) => {
   try {
     const keys = await db.select({
       id: apiKeys.id,
@@ -27,7 +27,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Create new API key
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -53,7 +53,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Delete API key
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 

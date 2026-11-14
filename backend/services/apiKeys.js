@@ -3,10 +3,6 @@ import crypto from 'crypto';
 // API keys are long random strings, so a fast hash is enough: there is
 // nothing to brute-force, and the server only ever needs to check a key.
 
-export function generateApiKey() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
 export function hashApiKey(key) {
   return crypto.createHash('sha256').update(String(key), 'utf8').digest('hex');
 }

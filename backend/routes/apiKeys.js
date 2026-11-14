@@ -1,16 +1,18 @@
 import express from 'express';
 import { db } from '../db/index.js';
 import { apiKeys } from '../db/schema.js';
+import { hashApiKey, apiKeyLastFour } from '../services/apiKeys.js';
 import { eq } from 'drizzle-orm';
 import { authenticateToken } from '../middleware/auth.js';
-import { generateApiKey, hashApiKey, apiKeyLastFour } from '../services/apiKeys.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 
-// Get all API keys. Only hashes are stored, so the keys themselves are never
-// returned here - just the last four characters to tell them apart.
+// Get all API keys
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    // Only hashes are stored, so the keys themselves are never returned here -
+    // just the last four characters to tell them apart
     const keys = await db.select({
       id: apiKeys.id,
       name: apiKeys.name,
@@ -37,7 +39,7 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // Generate a random API key and store only its hash
-    const key = generateApiKey();
+    const key = crypto.randomBytes(32).toString('hex');
 
     const [newKey] = await db.insert(apiKeys)
       .values({

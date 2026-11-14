@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateApiKey, hashApiKey, apiKeyLastFour, hashesMatch } from '../services/apiKeys.js';
+import { hashApiKey, apiKeyLastFour, hashesMatch } from '../services/apiKeys.js';
 
 test('hashApiKey is SHA-256 in hex', () => {
   // Published SHA-256 test vector for "abc"
@@ -10,13 +10,6 @@ test('hashApiKey is SHA-256 in hex', () => {
   );
   assert.equal(hashApiKey('abc'), hashApiKey('abc'));
   assert.notEqual(hashApiKey('abc'), hashApiKey('abd'));
-});
-
-test('generateApiKey returns distinct 64-character hex keys', () => {
-  const first = generateApiKey();
-  const second = generateApiKey();
-  assert.match(first, /^[0-9a-f]{64}$/);
-  assert.notEqual(first, second);
 });
 
 test('apiKeyLastFour keeps only the tail of the key', () => {

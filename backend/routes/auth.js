@@ -2,16 +2,42 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { eq, ne } from 'drizzle-orm';
+import { generateToken, requireAdmin, getAuthMode, getUserFromRequest } from '../middleware/auth.js';
 import logger from '../logger.js';
 
 const router = express.Router();
+
+// True when nobody has created an account yet. The "default" user that
+// AUTH_MODE=none creates for itself has a random password nobody knows, so it
+// does not count.
+async function isFirstRun() {
+  const [existing] = await db.select({ id: users.id })
+    .from(users)
+    .where(ne(users.username, 'default'))
+    .limit(1);
+
+  return !existing;
+}
+
+// Whether a request without a login may create an account. Always true except
+// with AUTH_MODE=admin, where it is only true until the first account exists.
+async function isRegistrationOpen() {
+  if (getAuthMode() !== 'admin') return true;
+  return isFirstRun();
+}
 
 // Register new user
 router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
+
+    // With AUTH_MODE=admin a login guards administration, so new accounts can
+    // only be created by someone already logged in (or as first-run setup)
+    if (!getUserFromRequest(req) && !(await isRegistrationOpen())) {
+      logger.warn('Registration refused - login required');
+      return res.status(403).json({ error: 'Registration is closed. Sign in to create another account.' });
+    }
 
     if (!username || !password) {
       logger.warn('Registration failed - missing credentials');
@@ -115,7 +141,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, async (req, res) => {
+router.get('/me', requireAdmin, async (req, res) => {
   try {
     const [user] = await db.select({
       id: users.id,
@@ -144,8 +170,22 @@ router.get('/me', authenticateToken, async (req, res) => {
 });
 
 // Public config endpoint - tells frontend whether auth is required
-router.get('/config', (req, res) => {
-  res.json({ authRequired: process.env.DISABLE_AUTH !== 'true' });
+// authRequired: a login is needed to use the app at all
+// authMode: full | admin | none (see middleware/auth.js)
+// registrationOpen: an account can be created without logging in
+router.get('/config', async (req, res) => {
+  const authMode = getAuthMode();
+
+  try {
+    res.json({
+      authRequired: authMode === 'full',
+      authMode,
+      registrationOpen: await isRegistrationOpen(),
+    });
+  } catch (error) {
+    logger.error('Auth config error', { error: error.message });
+    res.status(500).json({ error: 'Failed to get auth config' });
+  }
 });
 
 export default router;

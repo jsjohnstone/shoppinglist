@@ -8,6 +8,7 @@
 
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = TEST_DATABASE_URL ? false : 'TEST_DATABASE_URL not set';
@@ -25,8 +26,22 @@ let schema;
 let ops;
 let adminToken;
 let listId;
+let apiKeyId;
 let hadUsersAtStart;
 const createdUsernames = [ADMIN_NAME];
+
+// api_keys holds either the key itself or (once keys are hashed) its SHA-256
+// hash. Build a row that suits whichever schema this checkout has.
+function apiKeyRow(table, key, name) {
+  if ('keyHash' in table) {
+    return {
+      name,
+      keyHash: crypto.createHash('sha256').update(key, 'utf8').digest('hex'),
+      keyLastFour: key.slice(-4),
+    };
+  }
+  return { name, key };
+}
 
 async function call(method, path, { body, token } = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
@@ -154,7 +169,10 @@ before(async () => {
     adminToken = generateToken(user);
   }
 
-  await db.insert(schema.apiKeys).values({ key: API_KEY, name: 'auth mode tests' });
+  const [apiKey] = await db.insert(schema.apiKeys)
+    .values(apiKeyRow(schema.apiKeys, API_KEY, 'auth mode tests'))
+    .returning();
+  apiKeyId = apiKey.id;
   const [list] = await db.insert(schema.lists).values({ name: `Auth mode test list ${suffix}` }).returning();
   listId = list.id;
 });
@@ -174,7 +192,7 @@ after(async () => {
 
   await db.delete(schema.items).where(ops.eq(schema.items.listId, listId));
   await db.delete(schema.lists).where(ops.eq(schema.lists.id, listId));
-  await db.delete(schema.apiKeys).where(ops.eq(schema.apiKeys.key, API_KEY));
+  await db.delete(schema.apiKeys).where(ops.eq(schema.apiKeys.id, apiKeyId));
   await db.delete(schema.users).where(ops.inArray(schema.users.username, createdUsernames));
   server.closeAllConnections?.();
   await new Promise(resolve => server.close(resolve));

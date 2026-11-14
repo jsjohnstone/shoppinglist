@@ -8,6 +8,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = TEST_DATABASE_URL ? false : 'TEST_DATABASE_URL not set';
@@ -21,8 +22,22 @@ let db;
 let schema;
 let drizzleOps;
 let listId;
+let apiKeyId;
 let sseEvents = [];
 let sseAbort;
+
+// api_keys holds either the key itself or (once keys are hashed) its SHA-256
+// hash. Build a row that suits whichever schema this checkout has.
+function apiKeyRow(table, key, name) {
+  if ('keyHash' in table) {
+    return {
+      name,
+      keyHash: crypto.createHash('sha256').update(key, 'utf8').digest('hex'),
+      keyLastFour: key.slice(-4),
+    };
+  }
+  return { name, key };
+}
 
 async function call(method, path, { body, key = API_KEY, headers } = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
@@ -71,7 +86,10 @@ before(async () => {
   drizzleOps = await import('drizzle-orm');
   const itemsRoutes = (await import('../routes/items.js')).default;
 
-  await db.insert(schema.apiKeys).values({ key: API_KEY, name: 'route tests' });
+  const [apiKey] = await db.insert(schema.apiKeys)
+    .values(apiKeyRow(schema.apiKeys, API_KEY, 'route tests'))
+    .returning();
+  apiKeyId = apiKey.id;
   const [list] = await db.insert(schema.lists).values({ name: 'Route test list' }).returning();
   listId = list.id;
 
@@ -106,12 +124,12 @@ before(async () => {
 });
 
 after(async () => {
-  if (skip) return;
+  if (skip || !server) return;
 
   sseAbort?.abort();
   await clearItems();
   await db.delete(schema.lists).where(drizzleOps.eq(schema.lists.id, listId));
-  await db.delete(schema.apiKeys).where(drizzleOps.eq(schema.apiKeys.key, API_KEY));
+  await db.delete(schema.apiKeys).where(drizzleOps.eq(schema.apiKeys.id, apiKeyId));
   server.closeAllConnections?.();
   await new Promise(resolve => server.close(resolve));
   await sql.end();
